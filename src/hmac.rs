@@ -1,13 +1,23 @@
 use sha2::Sha256;
 use hmac::{Hmac, Mac};
 
-const KEY_SIZE: usize = 32;
-const MAC_SIZE: usize = 32;
+pub const KEY_SIZE: usize = 32;
+pub const MAC_SIZE: usize = 32;
 
 type HmacSha256 = Hmac<Sha256>;
 
+// TODO: introduce a more generic Key? size?
+#[derive(Clone, Copy)]
 pub struct Key([u8; KEY_SIZE]);
+
+#[derive(Clone, Copy)]
 pub struct Digest([u8; MAC_SIZE]);
+
+impl From<Digest> for Key {
+	fn from(digest: Digest) -> Self {
+		Self(digest.0)
+	}
+}
 
 impl From<&[u8; KEY_SIZE]> for Key {
 	fn from(slice: &[u8; KEY_SIZE]) -> Self {
@@ -44,7 +54,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn test_non_zero_digest() {
+	fn test_non_zero_output() {
 		let key = Key([123u8; KEY_SIZE]);
 		let msg = b"abcdef";
 		let digest = digest(&key, msg);
