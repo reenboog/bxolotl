@@ -27,20 +27,13 @@
 // return master_key_from_secret(c);
 // }
 
-use crate::{chain_key::ChainKey, root_key::RootKey, public_key::{PublicKeyX448}, key_pair::{KeyPair, KeyPairX448}};
+use crate::{chain_key::ChainKey, root_key::RootKey};
 
 // Derived by DH-ing an ephemeral key against a bunch of identity keys: either for Alice or Bob
 // Do I need this?
 struct MasterKey {
 	chain_key: ChainKey, 	// 32 bytes as well, `expand`-ed for each message?
 	root_key: RootKey			// 32 bytes
-}
-
-struct PrivateKey;
-
-enum Ratchet {
-	Sending(KeyPairX448, PublicKeyX448), // my private key
-	Receiving(PrivateKey, PublicKeyX448)
 }
 
 // master_key master_key_from_secret(const bytes_t &secret)

@@ -1,4 +1,4 @@
-use crate::{public_key::{PublicKeyX448, PublicKey}, chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru}, root_key::RootKey};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, message::KeyExchange};
 
 enum Role {
 	Alice, Bob
@@ -12,29 +12,36 @@ enum Role {
 struct Id(u64);
 
 impl Id {
-	// add parameters
-	fn new() {
-		todo!()
+	pub fn new(id: u64) -> Self {
+		Self(id)
 	}
 }
 
 struct Session {
-	id: Id, // u64?
+	id: Id,
 	role: Role,
-	counter: i32, // u32?
-	prev_counter: i32, // u32?
-	ratchet_counter: i32, // u32?
-	their_identity: Option<PublicKeyX448>, // make non optiona? embed into role?
+
+	counter: u32,
+	prev_counter: u32,
+	ratchet_counter: u32,
+
+	my_identity_ntru: KeyPairNtru,
+
 	root_key: RootKey,
-	send_chain_key: ChainKey,
-	// receive_chain
-	my_ratchet: KeyPairX448,
-	my_ratchet_ntru: KeyPairNtru,
-	their_ratchet: KeyPairX448,
-	their_ratchet_ntru: KeyPairNtru,
-	// unacked_key_exchange
-	alice_base_key: PublicKeyX448,
-	my_identity_ntru: KeyPairNtru
+	// TODO: can be made non optional if root_key is initialized in either alice/bob instead of encrypt as is now
+	send_chain_key: Option<ChainKey>, 
+	receive_chain: ReceiveChain,
+
+	// TODO: these two can be made non optional, if instead of resetting on decrypt a new ratched is generated
+	my_ratchet: Option<KeyPairX448>, 
+	my_ratchet_ntru: Option<KeyPairNtru>,
+
+	their_ratchet: Option<PublicKeyX448>, // TODO: try making non optional
+	their_ratchet_ntru: Option<PublicKeyNtru>, // TODO: try making non optional
+
+	unacked_key_exchange: Option<KeyExchange>,
+
+	alice_base_key: PublicKeyX448 // TODO: rather store base_key_id, for it's only used 
 }
 
 pub struct AcolotlMac {
@@ -48,6 +55,16 @@ impl Session {
 	}
 
 	fn decrypt(&self, mac: &AcolotlMac) -> Vec<u8> {
+		todo!()
+	}
+}
+
+impl Session {
+	fn alice() -> Self {
+		todo!()
+	}
+
+	fn bob() -> Self {
 		todo!()
 	}
 }
