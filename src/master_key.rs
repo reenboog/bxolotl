@@ -16,6 +16,7 @@ impl MasterKey {
 }
 
 pub fn alice(my_identity: &KeyPairX448,
+	my_ephemeral: &KeyPairX448,
 	their_identity: &PublicKeyX448,
 	their_signed_prekey: &SignedPublicKey,
 	their_prekey: &PublicKeyX448) -> MasterKey {

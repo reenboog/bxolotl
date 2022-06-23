@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru, PublicKeyEd448}, root_key::RootKey, receive_chain::ReceiveChain, message::KeyExchange, hmac::Digest, signed_public_key::SignedPublicKey, signed_key_pair::SignedKeyPair, master_key};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::SignedPublicKey, signed_key_pair::SignedKeyPair, master_key};
 
 enum Role {
 	Alice, Bob
@@ -49,25 +49,36 @@ impl Session {
 }
 
 impl Session {
-	// TODO: pass ephemeral_key as well
 	pub fn alice(my_identity: KeyPairX448, 
-		my_signing_identity: PublicKeyEd448, // my_ed_448_public
-		my_ntru_identity: PublicKeyNtru, // my_ntru_public
+		my_ephemeral: KeyPairX448,
+		my_signing_identity: SignedKeyPair, // TODO: SignedKeyPairX448
+		my_ntru_identity: KeyPairNtru,
+		my_ntru_ephemeral: KeyPairNtru,
 		their_identity: PublicKeyX448,
 		their_signed_prekey: SignedPublicKey, // TODO: introduce Prekey instead? – rather no, for it's just public keys
 		their_prekey: PublicKeyX448,
 		their_prekey_id: u64,	// combine with prekey? make i64?
 		their_ntru_prekey: PublicKeyNtru,
 		their_ntru_identity: PublicKeyNtru) -> Self {
-		// TODO: precalculate some keys
-		// use their_identity here
-		Self {
-			role: Role::Alice,
-			counter: 0,
-			prev_counter: 0,
-			ratchet_counter: 0,
-			my_ntru_identity: None,
-		}
+			let id = Self::derive_id(my_identity.public_key(), my_ephemeral.public_key(), &their_identity, &their_prekey);
+			let master_key = master_key::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
+			let key_exchange = KeyExchange::new(); // TODO: populate
+
+			Self { id,
+				role: Role::Alice,
+				counter: 0,
+				prev_counter: 0,
+				ratchet_counter: 0,
+				my_ntru_identity: Some(my_ntru_identity),
+				my_ratchet: None,
+				my_ratchet_ntru: Some(my_ntru_ephemeral),
+				their_ratchet: Some(their_prekey),
+				their_ratchet_ntru: their_ntru_prekey,
+				unacked_key_exchange: Some(key_exchange),
+				alice_base_ephemeral_key: None,
+				root_key: master_key.root_key().clone(),
+				send_chain_key: None, 
+				receive_chain: ReceiveChain::new() }
 	}
 
 	pub fn bob(my_identity: KeyPairX448,
@@ -108,5 +119,13 @@ impl Session {
 			// const auto buffer = concat_bytes({ alice_identity.key(), alice_ephemeral.key(), bob_identity.key(), bob_prekey.key() });
 			// return bytes_to_long(buffer);
 			1
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn derive_id() {
+		todo!()
 	}
 }

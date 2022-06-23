@@ -1,9 +1,6 @@
 // TODO: use proto definitions instead?
 // Corresponds to CryptoMessage
 
-pub struct KeyExchange {
-	// TODO: implement
-}
 
 enum MessageType {
 	Chat, InterDevice
