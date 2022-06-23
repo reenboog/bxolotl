@@ -29,8 +29,15 @@ pub struct KeyTypeNtru;
 pub type PrivateKeyNtru = PrivateKey<KeyTypeNtru, 1120>;
 pub type PublicKeyNtru = PublicKey<KeyTypeNtru, 1027>;
 
+pub struct KeyTypeEd448;
+
+pub type PrivateKeyEd448 = PublicKey<KeyTypeEd448, 57>;
+pub type PublicKeyEd448 = PublicKey<KeyTypeEd448, 57>;
+
 pub type KeyPairX448 = KeyPair<KeyTypeX448, 56, 56>;
 pub type KeyPairNtru = KeyPair<KeyTypeNtru, 1120, 1027>;
+pub type KeyPairEd448 = KeyPair<KeyTypeEd448, 57, 57>;
+
 
 #[cfg(test)]
 mod tests {
