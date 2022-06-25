@@ -1,6 +1,8 @@
 // TODO: use proto definitions instead?
 // Corresponds to CryptoMessage
 
+use crate::key_exchange::KeyExchange;
+
 
 enum MessageType {
 	Chat, InterDevice

@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::SignedPublicKey, signed_key_pair::SignedKeyPair, master_key};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key};
 
 enum Role {
 	Alice, Bob
@@ -17,7 +17,7 @@ struct Session {
 
 	// TODO: these two can be made non optional, if instead of resetting on decrypt a new ratched is generated
 	my_ratchet: Option<KeyPairX448>, 
-	my_ratchet_ntru: Option<KeyPairNtru>,
+	my_ntru_ratchet: Option<KeyPairNtru>,
 
 	// can be initially nil for Bob (until decrypt, plus, it can be ntru-encrypted itself)
 	their_ratchet: Option<PublicKeyX448>,
@@ -39,23 +39,13 @@ pub struct AcolotlMac {
 }
 
 impl Session {
-	fn encrypt(&self, msg: &[u8]) -> AcolotlMac {
-		todo!()
-	}
-
-	fn decrypt(&self, mac: &AcolotlMac) -> Vec<u8> {
-		todo!()
-	}
-}
-
-impl Session {
 	pub fn alice(my_identity: KeyPairX448, 
 		my_ephemeral: KeyPairX448,
-		my_signing_identity: SignedKeyPair, // TODO: SignedKeyPairX448
+		my_signing_identity: SignedKeyPairX448,
 		my_ntru_identity: KeyPairNtru,
-		my_ntru_ephemeral: KeyPairNtru,
+		my_ntru_ratchet: KeyPairNtru,
 		their_identity: PublicKeyX448,
-		their_signed_prekey: SignedPublicKey, // TODO: introduce Prekey instead? – rather no, for it's just public keys
+		their_signed_prekey: SignedPublicKeyX448,
 		their_prekey: PublicKeyX448,
 		their_prekey_id: u64,	// combine with prekey? make i64?
 		their_ntru_prekey: PublicKeyNtru,
@@ -71,19 +61,20 @@ impl Session {
 				ratchet_counter: 0,
 				my_ntru_identity: Some(my_ntru_identity),
 				my_ratchet: None,
-				my_ratchet_ntru: Some(my_ntru_ephemeral),
+				my_ntru_ratchet: Some(my_ntru_ratchet),
 				their_ratchet: Some(their_prekey),
 				their_ratchet_ntru: their_ntru_prekey,
 				unacked_key_exchange: Some(key_exchange),
-				alice_base_ephemeral_key: None,
+				alice_base_ephemeral_key: None, // REVIEW: move to role? It makes sense for Bob only anyway
 				root_key: master_key.root_key().clone(),
 				send_chain_key: None, 
-				receive_chain: ReceiveChain::new() }
+				receive_chain: ReceiveChain::new() // REVIEW: make optional?
+			}
 	}
 
 	pub fn bob(my_identity: KeyPairX448,
 		my_ntru_identity: KeyPairNtru,
-		my_signed_prekey: SignedKeyPair, // TODO: SignedKeyPairX448
+		my_signed_prekey: SignedKeyPairX448,
 		my_prekey: KeyPairX448,
 		my_ntru_prekey: KeyPairNtru,
 		their_identity: PublicKeyX448,
@@ -99,13 +90,13 @@ impl Session {
 				ratchet_counter: 0,
 				my_ntru_identity: Some(my_ntru_identity), 
 				my_ratchet: Some(my_prekey), 
-				my_ratchet_ntru: Some(my_ntru_prekey),
+				my_ntru_ratchet: Some(my_ntru_prekey),
 				their_ratchet: None, 
 				their_ratchet_ntru: their_ratchet_ntru, 
 				unacked_key_exchange: None,
 				alice_base_ephemeral_key: Some(their_ephemeral), 
 				root_key: master_key.root_key().clone(),
-				send_chain_key: None, 
+				send_chain_key: None, // REVIEW: master_key.chain_key? –rather not, for it's not used until encrypt
 				receive_chain: ReceiveChain::new() 
 			}
 	}
@@ -118,7 +109,20 @@ impl Session {
 			// TODO: test
 			// const auto buffer = concat_bytes({ alice_identity.key(), alice_ephemeral.key(), bob_identity.key(), bob_prekey.key() });
 			// return bytes_to_long(buffer);
-			1
+			// let bytes = alice_identity.as_bytes() + alice_ephemeral.as_bytes();
+			// TODO: introduce a helper method or trait
+			// u64::from_be_bytes(Sha256::digest(bytes).to_vec()[..8].try_into().unwrap())
+			todo!();
+	}
+}
+
+impl Session {
+	fn encrypt(&self, msg: &[u8]) -> AcolotlMac {
+		todo!()
+	}
+
+	fn decrypt(&self, mac: &AcolotlMac) -> Vec<u8> {
+		todo!()
 	}
 }
 

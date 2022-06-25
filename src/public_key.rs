@@ -1,6 +1,8 @@
-use std::{marker::PhantomData, fmt::Error, array::TryFromSliceError};
+use std::{marker::PhantomData, array::TryFromSliceError};
 
 use sha2::{Sha256, Digest};
+
+use crate::{key_pair::PublicKeyEd448, ed448_signature::Ed448Signature};
 
 pub struct PublicKey<T, const SIZE: usize> {
 	bytes: [u8; SIZE],
@@ -41,6 +43,13 @@ impl<T, const SIZE: usize> TryFrom<Vec<u8>> for PublicKey<T, SIZE> {
 
 			Ok(Self::new(slice))
     }
+}
+
+impl PublicKeyEd448 {
+	pub fn verify(&self, msg: &[u8], signature: &Ed448Signature) -> bool {
+		// TODO: implement
+		todo!()
+	}
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, key_pair::{KeyPairX448, PublicKeyX448}, signed_public_key::SignedPublicKey, signed_key_pair::SignedKeyPair};
+use crate::{chain_key::ChainKey, root_key::RootKey, key_pair::{KeyPairX448, PublicKeyX448}, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}};
 
-struct MasterKey {
+pub struct MasterKey {
 	chain_key: ChainKey,
 	root_key: RootKey
 }
@@ -18,13 +18,13 @@ impl MasterKey {
 pub fn alice(my_identity: &KeyPairX448,
 	my_ephemeral: &KeyPairX448,
 	their_identity: &PublicKeyX448,
-	their_signed_prekey: &SignedPublicKey,
+	their_signed_prekey: &SignedPublicKeyX448,
 	their_prekey: &PublicKeyX448) -> MasterKey {
 	todo!()
 }
 
 pub fn bob(my_identity: &KeyPairX448,
-	my_signed_prekey: &SignedKeyPair,
+	my_signed_prekey: &SignedKeyPairX448,
 	my_prekey: &KeyPairX448,
 	their_identity: &PublicKeyX448,
 	their_ephemeral: &PublicKeyX448

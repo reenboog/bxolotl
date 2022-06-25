@@ -19,25 +19,45 @@ impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> KeyPair<T, PRIV_SIZE, PUB
 	}
 }
 // TODO: introduce size() for this or any another phantom type to check when deserializing
+
+pub trait KeyPairSize {
+	const PRIV: usize;
+	const PUB: usize;
+}
+
 pub struct KeyTypeX448;
 
-pub type PrivateKeyX448 = PrivateKey<KeyTypeX448, 56>;
-pub type PublicKeyX448 = PublicKey<KeyTypeX448, 56>;
+impl KeyPairSize for KeyTypeX448 {
+	const PRIV: usize = 56;
+	const PUB: usize = 56;
+}
+
+pub type PrivateKeyX448 = PrivateKey<KeyTypeX448, { KeyTypeX448::PRIV }>;
+pub type PublicKeyX448 = PublicKey<KeyTypeX448, { KeyTypeX448::PUB }>;
 
 pub struct KeyTypeNtru;
 
-pub type PrivateKeyNtru = PrivateKey<KeyTypeNtru, 1120>;
-pub type PublicKeyNtru = PublicKey<KeyTypeNtru, 1027>;
+impl KeyPairSize for KeyTypeNtru {
+	const PRIV: usize = 1120;
+	const PUB: usize = 1027;
+}
+
+pub type PrivateKeyNtru = PrivateKey<KeyTypeNtru, { KeyTypeNtru::PRIV }>;
+pub type PublicKeyNtru = PublicKey<KeyTypeNtru, { KeyTypeNtru::PUB }>;
 
 pub struct KeyTypeEd448;
 
-pub type PrivateKeyEd448 = PublicKey<KeyTypeEd448, 57>;
-pub type PublicKeyEd448 = PublicKey<KeyTypeEd448, 57>;
+impl KeyPairSize for KeyTypeEd448 {
+	const PRIV: usize = 57;
+	const PUB: usize = 57;
+}
 
-pub type KeyPairX448 = KeyPair<KeyTypeX448, 56, 56>;
-pub type KeyPairNtru = KeyPair<KeyTypeNtru, 1120, 1027>;
-pub type KeyPairEd448 = KeyPair<KeyTypeEd448, 57, 57>;
+pub type PrivateKeyEd448 = PrivateKey<KeyTypeEd448, { KeyTypeEd448::PRIV }>;
+pub type PublicKeyEd448 = PublicKey<KeyTypeEd448, { KeyTypeEd448::PUB }>;
 
+pub type KeyPairX448 = KeyPair<KeyTypeX448, { KeyTypeX448::PRIV }, { KeyTypeX448::PUB }>;
+pub type KeyPairNtru = KeyPair<KeyTypeNtru, { KeyTypeNtru::PRIV }, { KeyTypeNtru::PUB }>;
+pub type KeyPairEd448 = KeyPair<KeyTypeEd448, { KeyTypeEd448::PRIV }, { KeyTypeEd448::PUB }>;
 
 #[cfg(test)]
 mod tests {

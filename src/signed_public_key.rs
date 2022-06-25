@@ -1,2 +1,34 @@
-// TODO: make generic like PublicKey?
-pub struct SignedPublicKey;
+use crate::{key_pair::{PublicKeyEd448, PublicKeyX448}, ed448_signature::Ed448Signature};
+
+// TODO: make more generic?,ie any public key signed with any signing key?
+// Represents any public key signed by en Ed448Key
+pub struct SignedPublicKey {
+	key: PublicKeyX448,
+	signature: Ed448Signature
+}
+
+impl SignedPublicKey {
+	pub fn key(&self) -> &PublicKeyX448 {
+		&self.key
+	}
+
+	pub fn signature(&self) -> &Ed448Signature {
+		&self.signature
+	}
+}
+
+impl SignedPublicKey {
+	pub fn verify(&self, signing_key_pub: &PublicKeyEd448) -> bool {
+		signing_key_pub.verify(self.key.as_bytes(), &self.signature)
+	}
+}
+
+pub type SignedPublicKeyX448 = SignedPublicKey;
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn test_sign_verify() {
+		todo!()
+	}
+}
