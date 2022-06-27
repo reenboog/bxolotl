@@ -1,5 +1,6 @@
 use crate::{session::AcolotlMac, aes_cbc, hmac};
 
+#[derive(Clone, Copy)]
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
 	iv: aes_cbc::Iv, 			// derived from chain_key.get_message_keys via kdf

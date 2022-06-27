@@ -9,7 +9,7 @@ struct Session {
 	role: Role,
 
 	counter: u32,
-	prev_counter: u32,
+	prev_counter: u32, // prev sending chain len?
 	ratchet_counter: u32,
 
 	// saved for Bob only, alice uses her ntru_ratched instead; FIXME: move to Role? 

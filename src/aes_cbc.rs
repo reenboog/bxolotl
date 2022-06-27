@@ -1,7 +1,9 @@
 const KEY_SIZE: usize = 32;
 const IV_SIZE: usize = 16;
 
+#[derive(Clone, Copy)]
 pub struct Key(pub [u8; KEY_SIZE]);
+#[derive(Clone, Copy)]
 pub struct Iv(pub [u8; IV_SIZE]);
 
 pub struct AesCbc {

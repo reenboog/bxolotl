@@ -3,6 +3,7 @@ use crate::hmac::Digest;
 use crate::message_key::MessageKey;
 use crate::{hmac, hkdf};
 
+// #[derive(Clone, Copy)]
 pub struct ChainKey {
 	pub key: hmac::Key, // 32 bytes
 	pub counter: u32		// > 0
