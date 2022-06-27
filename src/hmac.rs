@@ -7,10 +7,8 @@ pub const MAC_SIZE: usize = 32;
 type HmacSha256 = Hmac<Sha256>;
 
 // TODO: introduce a more generic Key? size?
-#[derive(Clone, Copy)]
 pub struct Key([u8; KEY_SIZE]);
 
-#[derive(Clone, Copy)]
 pub struct Digest([u8; MAC_SIZE]);
 
 impl From<Digest> for Key {

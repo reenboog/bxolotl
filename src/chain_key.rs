@@ -3,7 +3,7 @@ use crate::hmac::Digest;
 use crate::message_key::MessageKey;
 use crate::{hmac, hkdf};
 
-// #[derive(Clone, Copy)]
+// TODO: use (when introduced) key! macro
 pub struct ChainKey {
 	pub key: hmac::Key, // 32 bytes
 	pub counter: u32		// > 0
@@ -13,13 +13,13 @@ const SEED: &[u8] = b"SecureMessenger";
 
 impl ChainKey {
 	// TODO: introduce a dedicated type for this buffer; KeyBuf?
-	pub fn new(key: &hmac::Key, counter: u32) -> Self {
-		Self { key: key.clone(), counter }
+	pub fn new(key: hmac::Key, counter: u32) -> Self {
+		Self { key: key, counter }
 	}
 }
 
 impl ChainKey {
-	pub fn get_message_key(&self) -> MessageKey {
+	pub fn message_key(&self) -> MessageKey {
 		// 1 hkdf from self.key
 		// 2 split into MessageKey(enc_key, mac_key, iv)
 
@@ -41,7 +41,7 @@ impl ChainKey {
 		todo!()
 	}
 
-	pub fn get_next(&self) -> Self {
+	pub fn next(&self) -> Self {
 		// TODO: Self::new instead?
 		Self {
 			key: hmac::digest(&self.key, b"1").into(), // TODO: usre about this value?

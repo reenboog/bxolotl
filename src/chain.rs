@@ -1,22 +1,23 @@
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, mem, rc::Rc, borrow::Borrow};
+use crate::{key_pair::{PublicKeyX448, KeyPairNtru}, chain_key::{ChainKey}, message_key::MessageKey};
 
-use crate::{key_pair::{PublicKeyX448, KeyPairNtru}, chain_key::ChainKey, message_key::MessageKey};
+pub const MAX_KEYS_TO_SKIP: u32 = 1000;
 
 pub struct Next<'a> {
 	parent: &'a mut Chain,
-	new_skipped_keys: HashMap<u32, MessageKey>, // Rc? -no, moved on commit
-	chain_key: ChainKey,
 	counter: u32,
-	message_key: Option<MessageKey> // Rc?
+	keys_to_skip: HashMap<u32, Rc<MessageKey>>,
+	chain_key: Rc<ChainKey>,
+	message_key: Rc<MessageKey>
 }
 
 impl<'a> Next<'a> {
 	fn new(parent: &'a mut Chain) -> Self {
 		Self {
-			new_skipped_keys: HashMap::new(),
-			chain_key: parent.chain_key().clone(),
+			keys_to_skip: HashMap::new(),
 			counter: parent.next_counter(),
-			message_key: None,
+			chain_key: parent.chain_key(),
+			message_key: Rc::new(parent.chain_key().message_key()),
 			parent,
 		}
 	}
@@ -25,55 +26,44 @@ impl<'a> Next<'a> {
 		self.counter
 	}
 
-	pub fn message_key(&self) -> Option<&MessageKey> {
-		self.message_key.as_ref()
+	pub fn message_key(&self) -> &MessageKey {
+		&self.message_key
 	}
 
-	pub fn advance(&mut self, counter: u32) {
-		let message_key = self.chain_key.get_message_key();
+	fn advance(&mut self, counter: u32) {
+		self.message_key = Rc::new(self.chain_key.message_key());
 
 		if counter > self.counter {
-			self.new_skipped_keys.insert(self.counter, message_key); // TODO: Rc?
+			self.keys_to_skip.insert(self.counter, Rc::clone(&self.message_key));
 		}
 
-		self.message_key = Some(message_key); // TODO: wrap with Rc or something
-		self.chain_key = self.chain_key.get_next();
+		self.chain_key = Rc::new(self.chain_key.next());
 		self.counter = self.counter + 1;
 	}
 
-	// Moves chain_key, new_skipped_keys to parent, applies counter as next_counter and invalidates this Next
+	// Moves chain_key, keys_to_skip to parent, applies counter as next_counter and invalidates this Next
 	// stage() -> [advance()] -> commit()
 	pub fn commit(&mut self) {
 		self.parent.set_next_counter(self.counter);
-		self.parent.set_chain_key(self.chain_key);
+		self.parent.set_chain_key(Rc::clone(&self.chain_key));
 
-		// self.new_skipped_keys.iter().for_each(|(ctr, key)| {
-		// 	// TODO: new_skipped_keys are not used after commit is called, so move is possible
-		// 	self.parent.insert_skipped_key(ctr.clone(), key.clone()); // TODO: Rc?
-		// });
-
-		mem::replace(&mut self.new_skipped_keys, HashMap::new()).into_iter().for_each(|(ctr, key)| {
-			self.parent.insert_skipped_key(ctr, key); // TODO: Rc?
+		mem::replace(&mut self.keys_to_skip, HashMap::new()).into_iter().for_each(|(ctr, key)| {
+			self.parent.insert_skipped_key(ctr, key);
 		});
 
-		// sure about this? In general, this object should not be used afterwards
 		drop(self);
 	}
 }
-
-// TODO: inject
-pub const MAX_KEYS_TO_SKIP: u32 = 1000;
 
 pub enum Error {
 	TooManyKeysSkipped
 }
 
 pub struct Chain {
-	// TODO: implement
-	chain_key: ChainKey, // Cow? Rc? kept here
-	ratchet_key: PublicKeyX448, // Rc?
-	ntru_ratchet_key: Option<KeyPairNtru>, // Rc?
-	skipped_keys: HashMap<u32, MessageKey>, // HashMap<u32, Rc<MessageKey>>?
+	chain_key: Rc<ChainKey>,
+	ratchet_key: PublicKeyX448, // used for id only
+	ntru_ratchet_key: Option<KeyPairNtru>, // used for id only
+	skipped_keys: HashMap<u32, Rc<MessageKey>>,
 	next_counter: u32,
 	max_keys_to_skip: u32
 }
@@ -81,7 +71,7 @@ pub struct Chain {
 impl Chain {
 	pub fn new(rk: PublicKeyX448, ck: ChainKey, max_keys: u32) -> Self {
 		Self { 
-			chain_key: ck,
+			chain_key: Rc::new(ck),
 			ratchet_key: rk, 
 			ntru_ratchet_key: None, 
 			skipped_keys: HashMap::new(), 
@@ -92,11 +82,11 @@ impl Chain {
 }
 
 impl Chain {
-	pub fn chain_key(&self) -> &ChainKey {
-		&self.chain_key
+	fn chain_key(&self) -> Rc<ChainKey> {
+		Rc::clone(&self.chain_key)
 	}
 
-	fn set_chain_key(&mut self, ck: ChainKey) {
+	fn set_chain_key(&mut self, ck: Rc<ChainKey>) {
 		self.chain_key = ck;
 	}
 	// used for id mostly
@@ -130,10 +120,10 @@ impl Chain {
 	}
 
 	pub fn skipped_key(&self, counter: u32) -> Option<&MessageKey> {
-		self.skipped_keys.get(&counter)
+		self.skipped_keys.get(&counter).map(|k| { k.borrow() })
 	}
 
-	fn insert_skipped_key(&mut self, counter: u32, key: MessageKey) {
+	fn insert_skipped_key(&mut self, counter: u32, key: Rc<MessageKey>) {
 		self.skipped_keys.insert(counter, key);
 	}
 
