@@ -1,4 +1,6 @@
-use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru, serializable::Serializable};
+
+pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
 enum Role {
 	Alice, Bob
@@ -33,9 +35,15 @@ struct Session {
 	receive_chain: ReceiveChain
 }
 
-pub struct AcolotlMac {
+pub struct AxolotlMac {
 	body: Vec<u8>, // TODO: introduce a new type?
 	mac: Digest
+}
+
+impl Serializable for AxolotlMac {
+	fn serialize(&self) -> Vec<u8> {
+			todo!()
+	}
 }
 
 impl Session {
@@ -117,11 +125,53 @@ impl Session {
 }
 
 impl Session {
-	fn encrypt(&self, msg: &[u8]) -> AcolotlMac {
-		todo!()
+	// TODO: return result
+	pub fn encrypt(&mut self, plaintext: &[u8], message_type: MessageType) -> AxolotlMac {
+		if self.my_ratchet.is_none() {
+			if self.ratchet_counter == RATCHETS_BETWEEN_NTRU {
+				self.ratchet_counter = 0;
+				self.my_ntru_ratchet = Some(KeyPairNtru::generate()); // TODO: don't generate, but inject instead
+			}
+
+			self.ratchet_counter = self.ratchet_counter + 1;
+			self.my_ratchet = Some(KeyPairX448::generate()); // TODO: don't generate, but inject instead
+
+			// REVIEW: do I need MasterKey at all?
+			// TODO: don't hard unwrap
+			let (ck, rk) = master_key::derive(&self.root_key, &self.my_ratchet.as_ref().unwrap(), &self.their_ratchet.as_ref().unwrap()).into(); 
+
+			self.send_chain_key = Some(ck);
+			self.root_key = rk;
+
+			self.prev_counter = self.counter;
+			self.counter = 0;
+		}
+
+		let mut msg = Message::new();
+
+		if let Some(ref my_ntru_ratchet) = self.my_ntru_ratchet {
+			msg.set_ntru_encrypted_ratchet_key(ntru::encrypt_ephemeral(self.my_ratchet.as_ref().unwrap().public_key(), my_ntru_ratchet.public_key(), &self.their_ratchet_ntru, None));
+		} else {
+			msg.set_ratchet_key(self.my_ratchet.as_ref().unwrap().public_key().clone());
+		}
+
+		msg.set_counter(self.counter);
+		msg.set_prev_counter(self.prev_counter);
+		msg.set_type(message_type);
+		msg.set_key_exchange(self.unacked_key_exchange);
+
+		// TODO: don't hard unwrap
+		let mk = self.send_chain_key.as_ref().unwrap().message_key(); 
+		let mac = mk.encrypt(plaintext, &mut msg);
+
+		self.counter = self.counter + 1;
+		// TODO: don't hard unwrap
+		self.send_chain_key = Some(self.send_chain_key.as_ref().unwrap().next());
+
+		mac
 	}
 
-	fn decrypt(&self, mac: &AcolotlMac) -> Vec<u8> {
+	fn decrypt(&self, mac: &AxolotlMac) -> Vec<u8> {
 		todo!()
 	}
 }
@@ -131,5 +181,10 @@ mod tests {
 	#[test]
 	fn derive_id() {
 		todo!()
+	}
+
+	#[test]
+	fn test_encrypt() {
+
 	}
 }

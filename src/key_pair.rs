@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{private_key::PrivateKey, public_key::PublicKey};
 
 pub struct KeyPair<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> {
@@ -38,8 +40,8 @@ pub type PublicKeyX448 = PublicKey<KeyTypeX448, { KeyTypeX448::PUB }>;
 pub struct KeyTypeNtru;
 
 impl KeyPairSize for KeyTypeNtru {
-	const PRIV: usize = 1120;
-	const PUB: usize = 1027;
+	const PRIV: usize = ntrust::bridge::PRIVATE_KEY_SIZE;
+	const PUB: usize = ntrust::bridge::PUBLIC_KEY_SIZE;
 }
 
 pub type PrivateKeyNtru = PrivateKey<KeyTypeNtru, { KeyTypeNtru::PRIV }>;
@@ -58,6 +60,32 @@ pub type PublicKeyEd448 = PublicKey<KeyTypeEd448, { KeyTypeEd448::PUB }>;
 pub type KeyPairX448 = KeyPair<KeyTypeX448, { KeyTypeX448::PRIV }, { KeyTypeX448::PUB }>;
 pub type KeyPairNtru = KeyPair<KeyTypeNtru, { KeyTypeNtru::PRIV }, { KeyTypeNtru::PUB }>;
 pub type KeyPairEd448 = KeyPair<KeyTypeEd448, { KeyTypeEd448::PRIV }, { KeyTypeEd448::PUB }>;
+
+impl KeyPairNtru {
+	// TODO: implement, replace with new?
+	pub fn generate() -> Self {
+		Self {
+			private: todo!(),
+			public: todo!()
+		}
+	}
+}
+
+impl KeyPairX448 {
+	// TODO: implement, replace with new?
+	pub fn generate() -> Self {
+		Self {
+			private: todo!(),
+			public: todo!()
+		}
+	}
+}
+
+impl Clone for PublicKeyX448 {
+	fn clone(&self) -> Self {
+		Self::new(self.as_bytes().clone())
+	}
+}
 
 #[cfg(test)]
 mod tests {

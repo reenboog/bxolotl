@@ -15,6 +15,8 @@ pub mod signed_key_pair;
 pub mod key_exchange;
 pub mod chain;
 pub mod ed448_signature;
+pub mod ntru;
+pub mod serializable;
 pub mod master_key;
 pub mod message_key;
 

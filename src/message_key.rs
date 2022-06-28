@@ -1,4 +1,4 @@
-use crate::{session::AcolotlMac, aes_cbc, hmac};
+use crate::{session::AxolotlMac, aes_cbc, hmac, message::Message};
 
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
@@ -11,12 +11,12 @@ impl MessageKey {
 	// CryptoMessage is expected to be passed as well, but I'd move it to another place
 	// currently called `box`
 	// TODO: move to another entity?
-	fn encrypt(&self, msg: &[u8]) -> AcolotlMac {
+	pub fn encrypt(&self, plaintext: &[u8], msg: &mut Message) -> AxolotlMac {
 		// aes_cbc is used
 		todo!()
 	}
 
-	fn decrypt(&self, mac: &AcolotlMac) -> Vec<u8> {
+	pub fn decrypt(&self, mac: &AxolotlMac) -> Vec<u8> {
 		todo!()
 	}
 
