@@ -6,8 +6,8 @@ pub struct AesParams(AesCbc);
 
 pub struct NtruEncrypted {
 	encryption_key_id: u64, // encrypting_ntru_key_id
-	aes_params: Vec<u8>, // ntru_encrypted_aes_params
-	payload: Vec<u8> // aes_encrypted_data
+	aes_params: Vec<u8>, // ntru_encrypted_aes_params; TODO: why keep encoded?
+	payload: Vec<u8> // aes_encrypted_data; TODO: why keep encoded?
 }
 
 pub struct NtruEncryptedKey {
@@ -26,6 +26,7 @@ pub fn decrypt(ciphertext: &NtruEncrypted, key: &PrivateKeyNtru) -> Vec<u8> {
 }
 
 // encrypts (eph, ntru) with encrypting_key and optionally with second_encrypting_key, if present
+// double encryption is now done only for initial key exchange
 pub fn encrypt_ephemeral(eph: &PublicKeyX448, ntru: &PublicKeyNtru, encrypting_key: &PublicKeyNtru, second_encrypting_key: Option<&PublicKeyNtru>) -> NtruEncryptedKey {
 	todo!()
 }

@@ -55,6 +55,7 @@ impl<'a> Next<'a> {
 	}
 }
 
+#[derive(Debug)]
 pub enum Error {
 	TooManyKeysSkipped
 }

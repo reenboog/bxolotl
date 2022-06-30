@@ -16,42 +16,10 @@ impl MessageKey {
 		todo!()
 	}
 
+	// TODO: return result
 	pub fn decrypt(&self, mac: &AxolotlMac) -> Vec<u8> {
 		todo!()
 	}
-
-// 	main::AxolotlMAC message_keys::box(const ciphr::bytes_t &plain_text, main::CryptoMessage &msg) const
-// {
-//     aes_cbc cipher(_enc_key, _iv);
-//     const bytes_t encrypted = cipher.encrypt(plain_text);
-//     msg.set_ciphertext(encrypted.data(), encrypted.size());
-
-//     const auto msg_size = msg.ByteSize();
-//     bytes_t buffer(msg_size, ZeroByte);
-//     msg.SerializeToArray(buffer.data(), msg_size);
-
-//     const bytes_t mac = hmac::generate(_mac_key, buffer);
-//     main::AxolotlMAC output;
-//     output.set_allocated_body(new main::CryptoMessage(msg));
-//     output.set_mac(bytes_to_string(mac));
-
-//     return output;
-// }
-
-// ciphr::bytes_t message_keys::unbox(const main::AxolotlMAC &input) const
-// {
-//     const main::CryptoMessage &body(input.body());
-//     bytes_t buffer(body.ByteSize(), ZeroByte);
-//     body.SerializeToArray(buffer.data(), body.ByteSize());
-
-//     if (!hmac::verify(_mac_key, buffer, bytes_from_string(input.mac()))) {
-//         throw invalid_mac_exception();
-//     }
-
-//     aes_cbc cipher(_enc_key, _iv);
-//     return cipher.decrypt(bytes_from_string(input.body().ciphertext()));
-// }
-
 }
 
 #[cfg(test)]

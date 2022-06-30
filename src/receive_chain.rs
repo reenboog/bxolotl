@@ -14,8 +14,8 @@ impl ReceiveChain {
 }
 
 impl ReceiveChain {
-	pub fn current(&self) -> Option<&Chain> {
-		self.chains.front()
+	pub fn current_mut(&mut self) -> Option<&mut Chain> {
+		self.chains.front_mut()
 	}
 
 	// Prepend chain to the deque & remove the current chain if it has no skipped keys left

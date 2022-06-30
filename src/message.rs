@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use crate::{key_exchange::KeyExchange, key_pair::PublicKeyX448, ntru::NtruEncryptedKey};
 
 pub enum MessageType {
@@ -28,18 +30,34 @@ impl Message {
 		self.ratchet_key = Some(key);
 	}
 
+	pub fn ratchet_key(&self) -> Option<&PublicKeyX448> {
+		self.ratchet_key.borrow().as_ref()
+	}
+
 	// set_allocated_ntru_encrypted_ephemeral_key
 	// TODO: combine with set_ratchet via an enum?
 	pub fn set_ntru_encrypted_ratchet_key(&mut self, key: NtruEncryptedKey) {
 		self.ntru_encrypted_ratchet_key = Some(key);
 	}
 
+	pub fn ntru_encrypted_ratchet_key(&self) -> Option<&NtruEncryptedKey> {
+		self.ntru_encrypted_ratchet_key.borrow().as_ref()
+	}
+
 	pub fn set_counter(&mut self, ctr: u32) {
 		self.counter = ctr;
 	}
 
+	pub fn counter(&self) -> u32 {
+		self.counter
+	}
+
 	pub fn set_prev_counter(&mut self, ctr: u32) {
 		self.prev_counter = ctr;
+	}
+
+	pub fn prev_counter(&self) -> u32 {
+		self.prev_counter
 	}
 
 	pub fn set_type(&mut self, t: MessageType) {

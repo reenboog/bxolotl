@@ -87,6 +87,24 @@ impl Clone for PublicKeyX448 {
 	}
 }
 
+impl Clone for PrivateKeyNtru {
+	fn clone(&self) -> Self {
+		Self::new(self.as_bytes().clone())
+	}
+}
+
+impl Clone for PublicKeyNtru {
+	fn clone(&self) -> Self {
+		Self::new(self.as_bytes().clone())
+	}
+}
+
+impl Clone for KeyPairNtru {
+	fn clone(&self) -> Self {
+		Self { private: self.private.clone(), public: self.public.clone() }
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
