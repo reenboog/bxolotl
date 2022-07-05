@@ -1,9 +1,23 @@
-use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey}, serializable::Serializable, chain::{Chain, self}};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, public_key};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
 enum Role {
 	Alice, Bob
+}
+
+#[derive(Debug)]
+enum Error {
+	NoNtruIdentity,
+	NoNtruRatchet,
+	NtruBadEncoding
+}
+
+impl From<serializable::Error> for Error {
+	fn from(_: serializable::Error) -> Self {
+		// TODO: implement
+		todo!()
+	}
 }
 
 struct Session {
@@ -181,9 +195,29 @@ impl Session {
 		mac
 	}
 
-	// TODO: introduce Error
-	fn decrypt_ntru_encrypted(&self, key: &NtruEncryptedKey) -> Result<(PublicKeyX448, PublicKeyNtru), bool> {
-		todo!()
+	fn decrypt_ntru_encrypted(&self, key: &NtruEncryptedKey) -> Result<NtruedKeys, Error> {
+		let ntru_encrypted = if key.double_encrypted {
+			match self.my_ntru_identity {
+				// in general, we double encrypt with ntru identities only, not ephemeral ntru keys
+				Some(ref kp) if kp.public_key().id() == key.payload.encryption_key_id =>  {
+					NtruEncrypted::deserialize(&ntru::decrypt(&key.payload, kp.private_key()))?
+				}
+				_ => return Err(Error::NoNtruIdentity)
+			}
+		} else {
+			key.payload.clone()
+		};
+
+		let ntru_key = if let Some(ntru_key) = self.receive_chain.ntru_key_pair(ntru_encrypted.encryption_key_id) {
+			ntru_key.private_key()
+		} else {
+			match self.my_ntru_ratchet {
+				Some(ref my_ratchet) if my_ratchet.public_key().id() == ntru_encrypted.encryption_key_id => my_ratchet.private_key(),
+				_ => return Err(Error::NoNtruRatchet)
+			}
+		};
+
+		Ok(NtruedKeys::deserialize(&ntru::decrypt(&ntru_encrypted, ntru_key))?)
 	}
 
 	fn decrypt_with_current_or_past_chain(&self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Vec<u8>, bool> {
@@ -199,9 +233,9 @@ impl Session {
 		if let Some(ntru_encrypted_ratchet) = msg.ntru_encrypted_ratchet_key() {
 			// TODO: do not hard unwrap
 			// TODO: move to NtruEncryptedKey's impl?
-			let (x448, ntru) = self.decrypt_ntru_encrypted(ntru_encrypted_ratchet).unwrap();
+			let NtruedKeys { ephemeral, ntru } = self.decrypt_ntru_encrypted(ntru_encrypted_ratchet).unwrap();
 
-			purported_ratchet = x448;
+			purported_ratchet = ephemeral;
 			purported_ntru_ratchet = ntru;
 		} else {
 			// TODO: don't hard unwrap

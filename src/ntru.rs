@@ -1,19 +1,45 @@
 
-use crate::{aes_cbc::AesCbc, key_pair::{PublicKeyNtru, PrivateKeyNtru, PublicKeyX448}};
+use crate::{aes_cbc::AesCbc, key_pair::{PublicKeyNtru, PrivateKeyNtru, PublicKeyX448}, serializable::{Deserializable, self}};
 
 // TODO: check if it's cbc
 pub struct AesParams(AesCbc);
 
+#[derive(Clone)]
 pub struct NtruEncrypted {
-	encryption_key_id: u64, // encrypting_ntru_key_id
-	aes_params: Vec<u8>, // ntru_encrypted_aes_params; TODO: why keep encoded?
-	payload: Vec<u8> // aes_encrypted_data; TODO: why keep encoded?
+	pub encryption_key_id: u64, // encrypting_ntru_key_id
+	pub aes_params: Vec<u8>, // ntru_encrypted_aes_params; TODO: why keep encoded?
+	// decrypts to either another NtruEncrypted or to straight to (PublicKeyX448, PublickKeyNtru)
+	pub payload: Vec<u8> // aes_encrypted_data; TODO: why keep encoded?
+}
+
+// decrypted NtruEncrypted: x448 + ntru ratches
+pub struct NtruedKeys {
+	pub ephemeral: PublicKeyX448,
+	pub ntru: PublicKeyNtru
+}
+
+impl Deserializable for NtruedKeys {
+    type Error = serializable::Error;
+
+    fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+			// TODO: protobuf implement
+			todo!()
+    }
+}
+
+impl Deserializable for NtruEncrypted {
+	type Error = serializable::Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+		// TODO: protobuf implement
+		todo!()
+	}
 }
 
 pub struct NtruEncryptedKey {
-	key_id: u64, // ephemeral_key_id
-	double_encrypted: bool,
-	payload: NtruEncrypted // ntru_encrypted
+	pub key_id: u64, // ephemeral_key_id
+	pub double_encrypted: bool,
+	pub payload: NtruEncrypted // ntru_encrypted
 }
 
 pub fn encrypt(plain: &[u8], key: &PublicKeyNtru) -> NtruEncrypted {
