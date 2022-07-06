@@ -90,7 +90,7 @@ impl Chain {
 	fn set_chain_key(&mut self, ck: Rc<ChainKey>) {
 		self.chain_key = ck;
 	}
-	// used for id mostly
+	// used for id mostly; TODO: replace with id()?
 	pub fn ratchet_key(&self) -> &PublicKeyX448 {
 		&self.ratchet_key
 	}

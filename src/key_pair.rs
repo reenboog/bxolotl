@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{private_key::PrivateKey, public_key::PublicKey};
 
 pub struct KeyPair<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> {

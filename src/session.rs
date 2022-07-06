@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, public_key};
+use crate::{chain_key::ChainKey, key_pair::{KeyPairX448, KeyPairNtru, PublicKeyX448, PublicKeyNtru}, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, public_key, message_key};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -10,13 +10,24 @@ enum Role {
 enum Error {
 	NoNtruIdentity,
 	NoNtruRatchet,
-	NtruBadEncoding
+	NtruBadEncoding,
+	SkippedKeyMissing,
+	NewCounterForOldChain,
+	NewChainRequired,
+	NoCurrentChain,
+	TooManyKeySkipped
 }
 
 impl From<serializable::Error> for Error {
 	fn from(_: serializable::Error) -> Self {
-		// TODO: implement
-		todo!()
+		// TODO: is this enough?
+		Self::NtruBadEncoding
+	}
+}
+
+impl From<chain::Error> for Error {
+	fn from(_: chain::Error) -> Self {
+		Self::TooManyKeySkipped
 	}
 }
 
@@ -220,12 +231,47 @@ impl Session {
 		Ok(NtruedKeys::deserialize(&ntru::decrypt(&ntru_encrypted, ntru_key))?)
 	}
 
-	fn decrypt_with_current_or_past_chain(&self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Vec<u8>, bool> {
-		todo!()
+	fn decrypt_with_current_or_past_chain(&mut self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Option<Vec<u8>>, Error> {
+		// TODO: introduce Chain.id()
+		if let Some(current) = self.receive_chain.current().map(|c| c.ratchet_key().id()) {
+			if let Some(chain) = self.receive_chain.chain_mut(purported_ratchet) {
+				let counter = mac.body.counter();
+
+				if counter < chain.next_counter() {
+					let skipped = chain.skipped_key(counter).ok_or(Error::TooManyKeySkipped)?;
+					let decrypted = skipped.decrypt(mac); // TODO: should be Result instead
+
+					chain.remove(counter);
+
+					// TODO: introduce Chain.id()
+					if current != chain.ratchet_key().id() && !chain.has_skipped_keys() {
+						self.receive_chain.remove_by_ratchet_key_id(current);
+					}
+
+					return Ok(Some(decrypted));
+				} else {
+					// TODO: introduce Chain.id()
+					if chain.ratchet_key().id() != current {
+						return Err(Error::NewCounterForOldChain);
+					} else {
+						let mut next = chain.stage(counter)?;
+						let mk = next.message_key();
+						let decrypted = mk.decrypt(mac); // TODO: handle Result instead
+
+						next.commit();
+
+						return Ok(Some(decrypted));
+					}
+				}
+			}
+		}
+
+		// no chain found -> create a new ratchet
+		Ok(None)
 	}
 
 	// TODO: return Result
-	fn decrypt(&mut self, mac: &AxolotlMac) -> Vec<u8> {
+	fn decrypt(&mut self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
 		let msg = mac.body();
 		let purported_ratchet: PublicKeyX448; // TODO: can I get rid of this?
 		let purported_ntru_ratchet: PublicKeyNtru; // TODO: can I get rid of this?
@@ -243,8 +289,9 @@ impl Session {
 			purported_ntru_ratchet = self.their_ratchet_ntru.clone();
 		}
 
-		if let Ok(decrypted) = self.decrypt_with_current_or_past_chain(mac, &purported_ratchet) {
-			return decrypted;
+		// TODO: switch instead
+		if let Ok(Some(decrypted)) = self.decrypt_with_current_or_past_chain(mac, &purported_ratchet) {
+			return Ok(decrypted);
 		}
 
 		if self.my_ratchet.is_none() {
@@ -281,7 +328,7 @@ impl Session {
 		self.my_ntru_ratchet = None;
 		self.unacked_key_exchange = None;
 
-		decrypted
+		Ok(decrypted)
 	}
 }
 

@@ -14,6 +14,10 @@ impl ReceiveChain {
 }
 
 impl ReceiveChain {
+	pub fn current(&self) -> Option<&Chain> {
+		self.chains.front()
+	}
+
 	pub fn current_mut(&mut self) -> Option<&mut Chain> {
 		self.chains.front_mut()
 	}
@@ -30,15 +34,18 @@ impl ReceiveChain {
 		self.chains.push_front(chain);
 	}
 
+	pub fn remove_by_ratchet_key_id(&mut self, id: u64) {
+		self.chains.retain(|c| c.ratchet_key().id() != id);
+	}
+
 	pub fn remove(&mut self, chain: &Chain) {
-		// Originally, objects are compared by reference
-		self.chains.retain(|c| c.ratchet_key().id() != chain.ratchet_key().id());
+		self.remove_by_ratchet_key_id(chain.ratchet_key().id());
 	}
 
 	// TODO: accept ratchet key id
-	pub fn chain(&self, ratchet: &PublicKeyX448) -> Option<&Chain> {
+	pub fn chain_mut(&mut self, ratchet: &PublicKeyX448) -> Option<&mut Chain> {
 		// originally, the keys are compared, not ids
-		self.chains.iter().find(|c| c.ratchet_key().id() == ratchet.id())
+		self.chains.iter_mut().find(|c| c.ratchet_key().id() == ratchet.id())
 	}
 
 	pub fn ntru_key_pair(&self, id: u64) -> Option<&KeyPairNtru> {
