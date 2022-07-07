@@ -1,7 +1,7 @@
 use crate::{aes_cbc::AesCbc, serializable::{Deserializable, self}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}};
 
 // TODO: check if it's cbc
-pub struct AesParams(AesCbc);
+// pub struct AesParams(AesCbc);
 
 #[derive(Clone)]
 pub struct NtruEncrypted {

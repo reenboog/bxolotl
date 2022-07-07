@@ -77,6 +77,10 @@ impl Message {
 		self.key_exchange = kex;
 	}
 
+	pub fn ciphrtext(&self) -> &[u8] {
+		&self.ciphrtext
+	}
+
 	pub fn set_ciphrtext(&mut self, ct: &[u8]) {
 		self.ciphrtext = ct.to_vec();
 	}
