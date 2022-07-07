@@ -35,6 +35,7 @@ impl Deserializable for NtruEncrypted {
 	}
 }
 
+#[derive(Clone)]
 pub struct NtruEncryptedKey {
 	pub key_id: u64, // ephemeral_key_id
 	pub double_encrypted: bool,

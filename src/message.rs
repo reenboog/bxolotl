@@ -1,24 +1,33 @@
 use std::borrow::Borrow;
 
-use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448};
+use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448, serializable::Serializable};
 
+#[derive(Clone, Copy)]
 pub enum MessageType {
 	Chat, InterDevice
 }
 
+#[derive(Clone)]
 pub struct Message {
 	counter: u32,
 	prev_counter: u32,
 	// TODO: should it be optional? – yes, it's either ratchet_key or ntru_encrypted_ratchet_key
 	ratchet_key: Option<PublicKeyX448>, // TODO: union/enum for ntru encrypted? TODO: introduce Cow?
 	ntru_encrypted_ratchet_key: Option<NtruEncryptedKey>,
-	ciphr_text: Vec<u8>, // TODO: introduce a type?
+	ciphrtext: Vec<u8>, // TODO: introduce a type?
 	key_exchange: Option<KeyExchange>,
 	_type: MessageType, // TODO: rename
 }
 
 impl Message {
 	pub fn new() -> Self {
+		// TODO: implement
+		todo!()
+	}
+}
+
+impl Serializable for Message {
+	fn serialize(&self) -> Vec<u8> {
 		// TODO: implement
 		todo!()
 	}
@@ -66,6 +75,10 @@ impl Message {
 
 	pub fn set_key_exchange(&mut self, kex: Option<KeyExchange>) {
 		self.key_exchange = kex;
+	}
+
+	pub fn set_ciphrtext(&mut self, ct: &[u8]) {
+		self.ciphrtext = ct.to_vec();
 	}
 }
 

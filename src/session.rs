@@ -15,7 +15,14 @@ enum Error {
 	NewCounterForOldChain,
 	NewChainRequired,
 	NoCurrentChain,
-	TooManyKeySkipped
+	TooManyKeySkipped,
+	WrongAesMaterial
+}
+
+impl From<message_key::Error> for Error {
+	fn from(_: message_key::Error) -> Self {
+		Self::WrongAesMaterial
+	}
 }
 
 impl From<serializable::Error> for Error {
@@ -66,6 +73,10 @@ pub struct AxolotlMac {
 }
 
 impl AxolotlMac {
+	pub fn new(body: &Message, mac: &Digest) -> Self {
+		Self { body: body.clone(), mac: mac.clone() }
+	}
+
 	pub fn body(&self) -> &Message {
 		&self.body
 	}
@@ -239,7 +250,7 @@ impl Session {
 
 				if counter < chain.next_counter() {
 					let skipped = chain.skipped_key(counter).ok_or(Error::TooManyKeySkipped)?;
-					let decrypted = skipped.decrypt(mac); // TODO: should be Result instead
+					let decrypted = skipped.decrypt(mac)?;
 
 					chain.remove(counter);
 
@@ -256,7 +267,7 @@ impl Session {
 					} else {
 						let mut next = chain.stage(counter)?;
 						let mk = next.message_key();
-						let decrypted = mk.decrypt(mac); // TODO: handle Result instead
+						let decrypted = mk.decrypt(mac)?;
 
 						next.commit();
 
@@ -312,7 +323,7 @@ impl Session {
 
 		let mut next = new_chain.stage(msg.counter()).unwrap(); // TODO: don't hard unwrap
 
-		let decrypted = next.message_key().decrypt(mac);
+		let decrypted = next.message_key().decrypt(mac)?;
 		next.commit();
 
 		if let Some(current) = current {

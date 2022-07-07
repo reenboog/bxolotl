@@ -1,4 +1,4 @@
-use crate::{session::AxolotlMac, aes_cbc, hmac, message::Message};
+use crate::{session::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable, chain_key};
 
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
@@ -7,19 +7,28 @@ pub struct MessageKey {
 	ts: u64
 }
 
-impl MessageKey {
-	// CryptoMessage is expected to be passed as well, but I'd move it to another place
-	// currently called `box`
-	// TODO: move to another entity?
-	pub fn encrypt(&self, plaintext: &[u8], msg: &mut Message) -> AxolotlMac {
-		// aes_cbc is used
-		// "AES/CBC/PKCS5Padding"
+pub struct Error;
 
-		todo!()
+impl From<aes_cbc::Error> for Error {
+	fn from(_: aes_cbc::Error) -> Self {
+		Self
+	}
+}
+
+impl MessageKey {
+	pub fn encrypt(&self, plaintext: &[u8], msg: &mut Message) -> AxolotlMac {
+		let aes = AesCbc::new(self.enc_key.clone(), self.iv.clone());
+		let ct = aes.encrypt(plaintext);
+
+		msg.set_ciphrtext(&ct);
+
+		let mac = hmac::digest(&self.mac_key, &msg.serialize());
+
+		AxolotlMac::new(msg, &mac)
 	}
 
 	// TODO: return result
-	pub fn decrypt(&self, mac: &AxolotlMac) -> Vec<u8> {
+	pub fn decrypt(&self, mac: &AxolotlMac) -> Result<Vec<u8>, Error>  {
 		todo!()
 	}
 }
@@ -27,7 +36,7 @@ impl MessageKey {
 #[cfg(test)]
 mod tests {
 	#[test]
-	fn test_encrypt() {
+	fn test_encrypt_decrypt() {
 		todo!()
 	}
 }

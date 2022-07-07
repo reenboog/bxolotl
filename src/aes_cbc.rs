@@ -6,12 +6,24 @@ type Decryptor = cbc::Decryptor<aes::Aes256>;
 const KEY_SIZE: usize = 32;
 const IV_SIZE: usize = 16;
 
+#[derive(Clone, Copy)]
 pub struct Key(pub [u8; KEY_SIZE]);
+
+#[derive(Clone, Copy)]
 pub struct Iv(pub [u8; IV_SIZE]);
 
 pub struct AesCbc {
 	pub key: Key,
 	pub iv: Iv
+}
+
+#[derive(Debug)]
+pub struct Error;
+
+impl From<UnpadError> for Error {
+	fn from(_: UnpadError) -> Self {
+		Self
+	}
 }
 
 impl AesCbc {
@@ -25,8 +37,8 @@ impl AesCbc {
 		Encryptor::new(&self.key.0.into(), &self.iv.0.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext)
 	}
 
-	pub fn decrypt(&self, ciphrtext: &[u8]) -> Result<Vec<u8>, UnpadError> {
-		Decryptor::new(&self.key.0.into(), &self.iv.0.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphrtext)
+	pub fn decrypt(&self, ciphrtext: &[u8]) -> Result<Vec<u8>, Error> {
+		Ok(Decryptor::new(&self.key.0.into(), &self.iv.0.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphrtext)?)
 	}
 }
 
