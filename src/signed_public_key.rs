@@ -1,10 +1,10 @@
-use crate::{key_pair::{PublicKeyEd448, PublicKeyX448}, ed448_signature::Ed448Signature};
+use crate::{ed448::{Signature, PublicKeyEd448}, x448::PublicKeyX448};
 
 // TODO: make more generic?,ie any public key signed with any signing key?
 // Represents any public key signed by en Ed448Key
 pub struct SignedPublicKey {
 	key: PublicKeyX448,
-	signature: Ed448Signature
+	signature: Signature
 }
 
 impl SignedPublicKey {
@@ -12,7 +12,7 @@ impl SignedPublicKey {
 		&self.key
 	}
 
-	pub fn signature(&self) -> &Ed448Signature {
+	pub fn signature(&self) -> &Signature {
 		&self.signature
 	}
 }

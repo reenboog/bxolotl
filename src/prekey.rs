@@ -1,6 +1,6 @@
-use crate::key_pair::{KeyPairX448, KeyPairNtru};
+use crate::{x448::KeyPairX448, ntru::KeyPairNtru};
 
-struct Prekey {
+pub struct Prekey {
 	key_x448: KeyPairX448,
 	key_ntru: KeyPairNtru,
 	last_resort: bool

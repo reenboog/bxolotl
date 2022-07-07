@@ -1,5 +1,5 @@
 use std::{collections::VecDeque};
-use crate::{chain::Chain, key_pair::{PublicKeyX448, KeyPairNtru}};
+use crate::{chain::Chain, x448::PublicKeyX448, ntru::KeyPairNtru};
 
 pub struct ReceiveChain {
 	chains: VecDeque<Chain>

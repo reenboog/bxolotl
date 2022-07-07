@@ -1,7 +1,5 @@
 use std::{marker::PhantomData, array::TryFromSliceError};
 
-use crate::{key_pair::PrivateKeyEd448, ed448_signature::Ed448Signature};
-
 // TODO: introduce a macro to avoid duplicating what's implemented in PublicKey
 pub struct PrivateKey<T, const SIZE: usize> {
 	bytes: [u8; SIZE],
@@ -39,14 +37,6 @@ impl<T, const SIZE: usize> TryFrom<Vec<u8>> for PrivateKey<T, SIZE> {
 
 // TODO: introduce Into<KayPair<PrivateKey::Type, PrivateKey, PublicKey>>?
 
-impl PrivateKeyEd448 {
-	pub fn sign(&self, msg: &[u8]) -> Ed448Signature {
-		// TODO: implement
-		// TODO: test success verify
-		// TODO: test failure verify
-		todo!()
-	}
-}
 
 #[cfg(test)]
 mod tests {

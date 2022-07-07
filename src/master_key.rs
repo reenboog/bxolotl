@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, key_pair::{KeyPairX448, PublicKeyX448}, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}};
+use crate::{chain_key::ChainKey, root_key::RootKey, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, x448::{KeyPairX448, PublicKeyX448}};
 
 // TODO: use (ChainKey, RootKey) instead
 pub struct MasterKey {

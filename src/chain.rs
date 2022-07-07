@@ -1,5 +1,5 @@
 use std::{collections::HashMap, mem, rc::Rc, borrow::Borrow};
-use crate::{key_pair::{PublicKeyX448, KeyPairNtru}, chain_key::{ChainKey}, message_key::MessageKey};
+use crate::{chain_key::{ChainKey}, message_key::MessageKey, x448::PublicKeyX448, ntru::KeyPairNtru};
 
 pub const MAX_KEYS_TO_SKIP: u32 = 1000;
 

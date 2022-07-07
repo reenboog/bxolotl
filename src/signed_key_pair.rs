@@ -1,4 +1,4 @@
-use crate::{private_key::PrivateKey, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, key_pair::{KeyTypeX448, KeyTypeEd448, KeyPairSize, PrivateKeyX448}};
+use crate::{signed_public_key::{SignedPublicKeyX448}, x448::PrivateKeyX448};
 
 // TODO: make generic (aggregate KeyPair?)
 // Represents any key pair signed by an Ed448 key

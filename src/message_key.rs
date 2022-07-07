@@ -13,6 +13,8 @@ impl MessageKey {
 	// TODO: move to another entity?
 	pub fn encrypt(&self, plaintext: &[u8], msg: &mut Message) -> AxolotlMac {
 		// aes_cbc is used
+		// "AES/CBC/PKCS5Padding"
+
 		todo!()
 	}
 

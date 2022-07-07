@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use crate::{key_exchange::KeyExchange, key_pair::PublicKeyX448, ntru::NtruEncryptedKey};
+use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448};
 
 pub enum MessageType {
 	Chat, InterDevice

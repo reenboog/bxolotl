@@ -1,5 +1,4 @@
-
-use crate::{aes_cbc::AesCbc, key_pair::{PublicKeyNtru, PrivateKeyNtru, PublicKeyX448}, serializable::{Deserializable, self}};
+use crate::{aes_cbc::AesCbc, serializable::{Deserializable, self}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}};
 
 // TODO: check if it's cbc
 pub struct AesParams(AesCbc);
@@ -55,6 +54,43 @@ pub fn decrypt(ciphertext: &NtruEncrypted, key: &PrivateKeyNtru) -> Vec<u8> {
 // double encryption is now done only for initial key exchange
 pub fn encrypt_ephemeral(eph: &PublicKeyX448, ntru: &PublicKeyNtru, encrypting_key: &PublicKeyNtru, second_encrypting_key: Option<&PublicKeyNtru>) -> NtruEncryptedKey {
 	todo!()
+}
+
+pub struct KeyTypeNtru;
+
+impl KeyPairSize for KeyTypeNtru {
+	const PRIV: usize = ntrust::bridge::PRIVATE_KEY_SIZE;
+	const PUB: usize = ntrust::bridge::PUBLIC_KEY_SIZE;
+}
+
+pub type PrivateKeyNtru = PrivateKey<KeyTypeNtru, { KeyTypeNtru::PRIV }>;
+pub type PublicKeyNtru = PublicKey<KeyTypeNtru, { KeyTypeNtru::PUB }>;
+
+pub type KeyPairNtru = KeyPair<KeyTypeNtru, { KeyTypeNtru::PRIV }, { KeyTypeNtru::PUB }>;
+
+impl KeyPairNtru {
+	// TODO: implement, replace with new?
+	pub fn generate() -> Self {
+		todo!()
+	}
+}
+
+impl Clone for PrivateKeyNtru {
+	fn clone(&self) -> Self {
+		Self::new(self.as_bytes().clone())
+	}
+}
+
+impl Clone for PublicKeyNtru {
+	fn clone(&self) -> Self {
+		Self::new(self.as_bytes().clone())
+	}
+}
+
+impl Clone for KeyPairNtru {
+	fn clone(&self) -> Self {
+		Self::new(self.private_key().clone(), self.public_key().clone())
+	}
 }
 
 #[cfg(test)]
