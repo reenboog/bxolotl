@@ -7,6 +7,7 @@ macro_rules! key {
 		}
 
 		impl<T, const SIZE: usize> $type<T, SIZE> {
+			// TODO: rename to `from_bytes`?
 			pub fn new(bytes: [u8; SIZE]) -> Self {
 				Self {
 					bytes,

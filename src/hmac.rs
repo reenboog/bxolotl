@@ -63,7 +63,7 @@ mod tests {
 	const MAC_SIZE: usize = Digest::SIZE;
 
 	#[test]
-	fn test_non_zero_output() {
+	fn test_non_zeroes() {
 		let key = Key([123u8; KEY_SIZE]);
 		let msg = b"abcdef";
 		let digest = digest(&key, msg);

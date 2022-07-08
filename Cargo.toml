@@ -9,14 +9,20 @@ crate-type = ["lib", "staticlib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# randomness
+rand-07 = { package = "rand", version = "0.7.0" }
+
+#hashing
 sha2 = { version = "0.10" }
 hmac = { version = "0.12.1" }
-ring = { version = "0.16" }
+
+# ntru
 ntrust = { git = "ssh://git@git.onyxcorp.net/ccf/ntrust.git", branch = "master" }
+
+#448 ec
 x448 = { version = "0.6" }
+
+# aes_cbc deps
 cipher = { version = "0.4.2", features = ["block-padding", "alloc"] }
 aes = { version = "0.8.1" }
 cbc = { version = "0.1.2" }
-
-[dev-dependencies]
-hex = { version = "0.4.3"}
