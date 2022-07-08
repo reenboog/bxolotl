@@ -76,24 +76,6 @@ impl KeyPairNtru {
 	}
 }
 
-impl Clone for PrivateKeyNtru {
-	fn clone(&self) -> Self {
-		Self::new(self.as_bytes().clone())
-	}
-}
-
-impl Clone for PublicKeyNtru {
-	fn clone(&self) -> Self {
-		Self::new(self.as_bytes().clone())
-	}
-}
-
-impl Clone for KeyPairNtru {
-	fn clone(&self) -> Self {
-		Self::new(self.private_key().clone(), self.public_key().clone())
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	#[test]

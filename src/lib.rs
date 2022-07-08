@@ -3,6 +3,7 @@ pub mod key_pair;
 pub mod prekey;
 pub mod hmac;
 pub mod hkdf;
+pub mod key;
 pub mod session;
 pub mod message;
 pub mod root_key;

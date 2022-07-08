@@ -18,6 +18,12 @@ impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> KeyPair<T, PRIV_SIZE, PUB
 		&self.private
 	}
 }
+
+impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> Clone for KeyPair<T, PRIV_SIZE, PUB_SIZE> {
+	fn clone(&self) -> Self {
+		Self::new(self.private.clone(), self.public.clone())
+	}
+}
 // TODO: introduce size() for this or any another phantom type to check when deserializing
 
 pub trait KeyPairSize {
