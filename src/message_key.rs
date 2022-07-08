@@ -1,10 +1,9 @@
-use crate::{session::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable, chain_key};
+use crate::{session::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable};
 
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
-	iv: aes_cbc::Iv, 			// derived from chain_key.get_message_keys via kdf
 	mac_key: hmac::Key, // derived from chain_key.get_message_keys via kdf
-	ts: u64
+	iv: aes_cbc::Iv, 			// derived from chain_key.get_message_keys via kdf
 }
 
 pub enum Error {
@@ -15,6 +14,34 @@ pub enum Error {
 impl From<aes_cbc::Error> for Error {
 	fn from(_: aes_cbc::Error) -> Self {
 		Self::BadKeyMaterial
+	}
+}
+
+impl MessageKey {
+	pub const SIZE: usize = {aes_cbc::Key::SIZE + aes_cbc::Iv::SIZE + hmac::Key::SIZE};
+}
+
+impl From<&[u8; MessageKey::SIZE]> for MessageKey {
+	fn from(src: &[u8; MessageKey::SIZE]) -> Self {
+		Self {
+			enc_key: aes_cbc::Key(src[..aes_cbc::Key::SIZE].try_into().unwrap()),
+			mac_key: hmac::Key(src[aes_cbc::Key::SIZE..aes_cbc::Key::SIZE + hmac::Key::SIZE].try_into().unwrap()),
+			iv: aes_cbc::Iv(src[aes_cbc::Key::SIZE + hmac::Key::SIZE..].try_into().unwrap())
+		}
+	}
+}
+
+impl MessageKey {
+	pub fn enc_key(&self) -> &aes_cbc::Key {
+		&self.enc_key
+	}
+
+	pub fn mac_key(&self) -> &hmac::Key {
+		&self.mac_key
+	}
+
+	pub fn iv(&self) -> &aes_cbc::Iv {
+		&self.iv
 	}
 }
 
@@ -43,6 +70,8 @@ impl MessageKey {
 
 #[cfg(test)]
 mod tests {
+	use super::MessageKey;
+
 	#[test]
 	fn test_encrypt_decrypt() {
 		todo!()
@@ -57,4 +86,11 @@ mod tests {
 	fn test_decrypt_with_wrong_mac() {
 		todo!()
 	}
+
+	#[test]
+	fn test_from_slice() {
+		// should not panic
+		let _: MessageKey = (&[1u8; MessageKey::SIZE]).into();
+	}
+
 }

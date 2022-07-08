@@ -3,14 +3,19 @@ use aes::cipher::{block_padding::{Pkcs7, UnpadError}, BlockEncryptMut, BlockDecr
 type Encryptor = cbc::Encryptor<aes::Aes256>;
 type Decryptor = cbc::Decryptor<aes::Aes256>;
 
-const KEY_SIZE: usize = 32;
-const IV_SIZE: usize = 16;
+#[derive(Clone, Copy)]
+pub struct Key(pub [u8; Self::SIZE]);
+
+impl Key {
+	pub const SIZE: usize = 32;
+}
 
 #[derive(Clone, Copy)]
-pub struct Key(pub [u8; KEY_SIZE]);
+pub struct Iv(pub [u8; Self::SIZE]);
 
-#[derive(Clone, Copy)]
-pub struct Iv(pub [u8; IV_SIZE]);
+impl Iv {
+	pub const SIZE: usize = 16;
+}
 
 pub struct AesCbc<'a> {
 	pub key: &'a Key,
@@ -46,7 +51,10 @@ impl<'a> AesCbc<'a> {
 
 #[cfg(test)]
 mod tests {
-	use super::{AesCbc, Key, KEY_SIZE, Iv, IV_SIZE};
+	use super::{AesCbc, Key, Iv};
+
+	const KEY_SIZE: usize = Key::SIZE;
+	const IV_SIZE: usize = Iv::SIZE;
 
 	#[test]
 	fn test_decrypt() {

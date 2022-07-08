@@ -1,16 +1,25 @@
 use sha2::Sha256;
 use hmac::{Hmac, Mac};
 
-pub const KEY_SIZE: usize = 32;
-pub const MAC_SIZE: usize = 32;
-
 type HmacSha256 = Hmac<Sha256>;
 
 // TODO: introduce a more generic Key? size?
-pub struct Key([u8; KEY_SIZE]);
+pub struct Key(pub [u8; Self::SIZE]);
+
+impl Key {
+	pub const SIZE: usize = 32;
+}
 
 #[derive(Clone, Copy)]
-pub struct Digest([u8; MAC_SIZE]);
+pub struct Digest(pub [u8; Self::SIZE]);
+
+impl Digest {
+	pub const SIZE: usize = 32;
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
+	}
+}
 
 impl From<Digest> for Key {
 	fn from(digest: Digest) -> Self {
@@ -18,19 +27,17 @@ impl From<Digest> for Key {
 	}
 }
 
-impl From<&[u8; KEY_SIZE]> for Key {
-	fn from(slice: &[u8; KEY_SIZE]) -> Self {
+impl From<&[u8; Key::SIZE]> for Key {
+	fn from(slice: &[u8; Key::SIZE]) -> Self {
 		Self(slice.clone())
 	}
 }
 
-impl From<&[u8; MAC_SIZE]> for Digest {
-	fn from(slice: &[u8; MAC_SIZE]) -> Self {
+impl From<&[u8; Digest::SIZE]> for Digest {
+	fn from(slice: &[u8; Digest::SIZE]) -> Self {
 		Self(slice.clone())
 	}
 }
-
-// TODO: introduce a module or a struct
 
 pub fn digest(key: &Key, msg: &[u8]) -> Digest {
 	let mut mac = HmacSha256::new_from_slice(&key.0).unwrap();
@@ -51,6 +58,9 @@ pub fn verify(msg: &[u8], key: &Key, hash: &Digest) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	const KEY_SIZE: usize = Key::SIZE;
+	const MAC_SIZE: usize = Digest::SIZE;
 
 	#[test]
 	fn test_non_zero_output() {

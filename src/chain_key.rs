@@ -1,18 +1,16 @@
 use crate::hkdf::Hkdf;
-use crate::hmac::Digest;
 use crate::message_key::MessageKey;
-use crate::{hmac, hkdf};
+use crate::{hmac};
 
 // TODO: use (when introduced) key! macro
 pub struct ChainKey {
-	pub key: hmac::Key, // 32 bytes
-	pub counter: u32		// > 0
+	pub key: hmac::Key,
+	pub counter: u32
 }
 
 const SEED: &[u8] = b"SecureMessenger";
 
 impl ChainKey {
-	// TODO: introduce a dedicated type for this buffer; KeyBuf?
 	pub fn new(key: hmac::Key, counter: u32) -> Self {
 		Self { key: key, counter }
 	}
@@ -20,40 +18,53 @@ impl ChainKey {
 
 impl ChainKey {
 	pub fn message_key(&self) -> MessageKey {
-		// 1 hkdf from self.key
-		// 2 split into MessageKey(enc_key, mac_key, iv)
+		let mk = hmac::digest(&self.key, b"0");
+		let material = Hkdf::new(mk).expand::<{MessageKey::SIZE}>(SEED);
 
-		// static const bytes_t SeedBytes = ciphr::bytes_from_string(MessageKeysSeed);
-
-		// static type size for into() would be great
-
-		let mk = hmac::digest(&self.key, b"0"); // TODO: sure about this value? it's 48
-		let key_material = Hkdf::new(mk).expand::<80>(SEED); // introduce a type (via into?)
-		// let enc_key: hmac::Key = key_material[..32].into();
-
-    // const bytes_t mk = hmac::generate(_key, bytes_t(1, static_cast<std::byte>('0')));
-    // const bytes_t key_material = hkdf(mk).expand(SeedBytes, 32 + 32 + 16);
-    // const bytes_t enc_key(key_material.begin(), key_material.begin() + 32);
-    // const bytes_t mac_key(key_material.begin() + 32, key_material.begin() + 64);
-    // const bytes_t iv(key_material.begin() + 64, key_material.begin() + 80);
-    // return message_keys(enc_key, mac_key, iv);
-
-		todo!()
+		(&material).into()
 	}
 
 	pub fn next(&self) -> Self {
-		// TODO: Self::new instead?
-		Self {
-			key: hmac::digest(&self.key, b"1").into(), // TODO: usre about this value?
-			counter: self.counter + 1
-		}
+		Self::new(hmac::digest(&self.key, b"1").into(), self.counter + 1)
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	use super::ChainKey;
+	use crate::hmac::Key;
+
 	#[test]
-	fn test_len() {
-		assert_eq!(0, b'0');
+	fn test_message_key() {
+		let ck0 = ChainKey::new(Key([1u8; Key::SIZE]), 123);
+		let mk0 = ck0.message_key();
+
+		assert_eq!(mk0.enc_key().0, b"\x3b\x61\x92\x07\x04\x6d\x48\xd5\xcf\x15\x67\x9e\x25\x3a\xba\x7c\x7d\xd6\xfc\xcd\x5b\xdb\x9d\xb4\x47\x14\x25\x12\xcf\x1b\x35\x8a".to_owned());
+		assert_eq!(mk0.mac_key().0, b"\x1e\xd0\xba\x42\x8f\x2b\x3f\x93\xfc\x13\x6d\x3c\x0c\x89\xf6\x91\x39\xba\x1f\x00\x75\x9d\x61\x8a\x9d\xf5\x54\xfa\xa9\x46\x78\xbb".to_owned());
+		assert_eq!(mk0.iv().0, b"\xd2\x12\x6a\x28\x8e\x9e\xea\x4b\x72\x9e\x00\xff\x4f\x1e\xbd\x5c".to_owned());
+
+		// different key -> different message key
+		let ck1 = ChainKey::new(Key([2u8; Key::SIZE]), 123);
+		let mk1 = ck1.message_key();
+
+		assert_ne!(mk0.enc_key().0, mk1.enc_key().0);
+		assert_ne!(mk0.mac_key().0, mk1.mac_key().0);
+		assert_ne!(mk0.iv().0, mk1.iv().0);
+	}
+
+	#[test]
+	fn test_next() {
+		let ck0 = ChainKey::new(Key([1u8; Key::SIZE]), 123);
+		let next0 = ck0.next();
+
+		assert_eq!(next0.counter, 124);
+		assert_eq!(next0.key.0, b"\x51\x0c\x69\x0a\xa8\x7a\x90\x0f\xee\x5f\x4f\x2b\x05\x15\x49\x59\x97\xba\x30\x3b\xbb\x6d\x48\x01\x24\x30\xac\xe0\x06\x11\x5c\x7e".to_owned());
+
+		// different key -> different next
+		let ck1 = ChainKey::new(Key([2u8; Key::SIZE]), 123);
+		let next1 = ck1.next();
+
+		assert_eq!(next0.counter, next1.counter);
+		assert_ne!(next0.key.0, next1.key.0);
 	}
 }
