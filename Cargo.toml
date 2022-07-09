@@ -10,6 +10,7 @@ crate-type = ["lib", "staticlib"]
 
 [dependencies]
 # randomness
+rand = { version = "0.8.5" }
 rand-07 = { package = "rand", version = "0.7.0" }
 
 #hashing
@@ -21,8 +22,12 @@ ntrust = { git = "ssh://git@git.onyxcorp.net/ccf/ntrust.git", branch = "master" 
 
 #448 ec
 x448 = { version = "0.6" }
+ed448-rust = { git = "https://github.com/reenboog/ed448-rust", branch = "master" }
 
 # aes_cbc deps
 cipher = { version = "0.4.2", features = ["block-padding", "alloc"] }
 aes = { version = "0.8.1" }
 cbc = { version = "0.1.2" }
+
+[dev-dependencies]
+hex = { version = "0.4.3" }

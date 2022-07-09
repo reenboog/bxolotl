@@ -47,17 +47,17 @@ pub fn derive(root: &RootKey, my_ratchet: &KeyPairX448, their_ratchet: &PublicKe
 mod tests {
 
 	#[test]
-	fn test_dh_unknown_failed() {
+	fn test_master_unknown_failed() {
 		todo!()
 	}
 
 	#[test]
-	fn test_dh_alice() {
+	fn test_master_alice() {
 		todo!()
 	}
 
 	#[test]
-	fn test_dh_bob() {
+	fn test_master_bob() {
 		todo!()
 	}
 }
