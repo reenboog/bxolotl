@@ -106,7 +106,7 @@ impl Session {
 		their_ntru_identity: PublicKeyNtru) -> Self {
 			let id = Self::derive_id(my_identity.public_key(), my_ephemeral.public_key(), &their_identity, &their_prekey);
 			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
-			let key_exchange = KeyExchange::new(); // TODO: populate
+			let key_exchange = KeyExchange::new(); // FIXME: populate
 
 			Self { id,
 				role: Role::Alice,

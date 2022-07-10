@@ -25,7 +25,7 @@ impl From<&[u8; MessageKey::SIZE]> for MessageKey {
 	fn from(src: &[u8; MessageKey::SIZE]) -> Self {
 		Self {
 			enc_key: aes_cbc::Key(src[..aes_cbc::Key::SIZE].try_into().unwrap()),
-			mac_key: hmac::Key(src[aes_cbc::Key::SIZE..aes_cbc::Key::SIZE + hmac::Key::SIZE].try_into().unwrap()),
+			mac_key: hmac::Key::new(src[aes_cbc::Key::SIZE..aes_cbc::Key::SIZE + hmac::Key::SIZE].try_into().unwrap()),
 			iv: aes_cbc::Iv(src[aes_cbc::Key::SIZE + hmac::Key::SIZE..].try_into().unwrap())
 		}
 	}

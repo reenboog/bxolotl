@@ -4,10 +4,18 @@ use hmac::{Hmac, Mac};
 type HmacSha256 = Hmac<Sha256>;
 
 // TODO: introduce a more generic Key? size?
-pub struct Key(pub [u8; Self::SIZE]);
+pub struct Key([u8; Self::SIZE]);
 
 impl Key {
 	pub const SIZE: usize = 32;
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
+	}
+
+	pub fn new(bytes: [u8; Self::SIZE]) -> Self {
+		Self(bytes)
+	}
 }
 
 #[derive(Clone, Copy)]

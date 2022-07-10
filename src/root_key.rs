@@ -7,6 +7,10 @@ impl RootKey {
 	pub fn new(bytes: [u8; Self::SIZE]) -> Self {
 		Self(bytes)
 	}
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
+	}
 }
 
 // used to derive chain keys and subsequent root keys
