@@ -5,18 +5,19 @@ pub struct Hkdf {
 }
 
 impl Hkdf {
-	const EMPTY_SALT: [u8; 32] = [0u8; 32];
+	const EMPTY_SALT: [u8; hmac::Key::SIZE] = [0u8; hmac::Key::SIZE];
 
 	pub fn new(prk: Digest) -> Self {
 		Self { prk }
 	}
 
-	pub fn from_ikm(ikm: &[u8; hmac::Key::SIZE]) -> Self {
+	pub fn from_ikm(ikm: &[u8]) -> Self {
 		Self::from_ikm_salted(ikm, &Self::EMPTY_SALT)
 	}
 
-	pub fn from_ikm_salted(ikm: &[u8; hmac::Key::SIZE], salt: &[u8]) -> Self {
-		Self::new(hmac::digest(&hmac::Key(ikm.clone()), salt))
+	// TODO: rename and reflect it's a fixed-size Key, not salt?
+	pub fn from_ikm_salted(ikm: &[u8], salt: &[u8; hmac::Key::SIZE]) -> Self {
+		Self::new(hmac::digest(&hmac::Key(salt.clone()), ikm))
 	}
 
 	// TODO: introduce a new type for expanded?, clarify its size; or may be just a const or a combined type, ie KeyMac?
@@ -50,8 +51,10 @@ impl Hkdf {
 mod tests {
 	use crate::{hmac::Digest, hkdf::Hkdf};
 
-	const DIGEST: &[u8; 32] = b"\x95\x25\x9b\x85\xc5\x2d\x50\x60\x14\xa9\xba\x39\xc4\x13\x94\x72\xe2\x7f\x97\x88\x5d\xc4\x00\x70\xfb\xda\x54\x3b\x74\xb3\xda\x61";
-	const RES: &[u8; 80] = b"\x3b\x61\x92\x07\x04\x6d\x48\xd5\xcf\x15\x67\x9e\x25\x3a\xba\x7c\x7d\xd6\xfc\xcd\x5b\xdb\x9d\xb4\x47\x14\x25\x12\xcf\x1b\x35\x8a\x1e\xd0\xba\x42\x8f\x2b\x3f\x93\xfc\x13\x6d\x3c\x0c\x89\xf6\x91\x39\xba\x1f\x00\x75\x9d\x61\x8a\x9d\xf5\x54\xfa\xa9\x46\x78\xbb\xd2\x12\x6a\x28\x8e\x9e\xea\x4b\x72\x9e\x00\xff\x4f\x1e\xbd\x5c";
+	// [1u8; 32] hmac-ed with EMPTY_SALT
+	const DIGEST: &[u8; 32] = b"\x80\xa0\x9d\xe3\xbf\xe3\x0d\xa9\x01\x16\xe5\x88\xad\xe2\xf8\x12\xd4\x9b\x55\x62\x5b\xe8\xb4\xab\xbf\xf7\x75\xfa\x5a\x5a\x74\xe9";
+	// DIGEST hkdf-ed up to 80 with b"SecureMessenger"
+	const RES: &[u8; 80] = b"\x69\xef\xc1\x01\x77\xa9\x2d\x9f\x65\x47\x82\x64\x0d\xbd\x07\xa4\xf4\x2a\x8d\xe1\x6c\x99\x28\x2d\x46\x4c\xa6\x8b\x7e\x5e\x69\x4a\x57\x2c\x91\x39\xb6\x0b\x8e\x5d\xb1\xf1\xb0\x01\xe9\x98\x7a\xdc\xd7\xef\x5a\xde\x7f\x38\x5a\x84\x43\xfb\x44\xad\x99\x08\x9a\x88\x40\x4c\x5d\xf2\x3c\x80\x14\xe4\x0a\xa1\x65\x72\x6c\x37\x94\x0e";
 
 	#[test]
 	fn test_not_zeroes() {
@@ -64,7 +67,7 @@ mod tests {
 	#[test]
 	fn test_extract_from_ikm() {
 		let key = [1u8; 32];
-		let salt = b"0".to_owned();
+		let salt = Hkdf::EMPTY_SALT.to_owned();
 
 		let res = Hkdf::from_ikm_salted(&key, &salt).expand::<80>(b"SecureMessenger");
 
@@ -84,7 +87,7 @@ mod tests {
 		let digest = Digest(DIGEST.to_owned());
 		let res = Hkdf::new(digest).expand::<>(b"SecureMessenger");
 
-		assert_eq!(res, b"\x3b\x61".to_owned());
+		assert_eq!(res, b"\x69\xef".to_owned());
 	}
 
 	#[test]
