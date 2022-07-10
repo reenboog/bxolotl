@@ -8,6 +8,10 @@ pub struct SignedKeyPair {
 }
 
 impl SignedKeyPair {
+	pub fn new(private: PrivateKeyX448, public: SignedPublicKeyX448) -> Self {
+		Self { private, public }
+	}
+
 	pub fn private(&self) -> &PrivateKeyX448 {
 		&self.private
 	}
