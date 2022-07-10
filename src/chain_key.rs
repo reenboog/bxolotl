@@ -2,7 +2,6 @@ use crate::hkdf::Hkdf;
 use crate::message_key::MessageKey;
 use crate::{hmac};
 
-// TODO: use (when introduced) key! macro
 pub struct ChainKey {
 	pub key: hmac::Key,
 	pub counter: u32
@@ -11,6 +10,8 @@ pub struct ChainKey {
 const SEED: &[u8] = b"SecureMessenger";
 
 impl ChainKey {
+	pub const SIZE: usize = 32;
+
 	pub fn new(key: hmac::Key, counter: u32) -> Self {
 		Self { key: key, counter }
 	}

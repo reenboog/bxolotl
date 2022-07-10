@@ -80,7 +80,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_decrypt_with_wrong_material() {
+	fn test_decryption_fails_with_wrong_material() {
 		let aes = AesCbc::new(&Key([1u8; KEY_SIZE]), &Iv([2u8; IV_SIZE]));
 		let pt = b"hi there";
 		let ct = aes.encrypt(pt);

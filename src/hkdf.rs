@@ -5,17 +5,27 @@ pub struct Hkdf {
 }
 
 impl Hkdf {
+	const EMPTY_SALT: [u8; 32] = [0u8; 32];
+
 	pub fn new(prk: Digest) -> Self {
 		Self { prk }
 	}
 
-	pub fn new_from_ikm(ikm: &[u8; hmac::Key::SIZE], salt: &[u8]) -> Self {
+	pub fn from_ikm(ikm: &[u8; hmac::Key::SIZE]) -> Self {
+		Self::from_ikm_salted(ikm, &Self::EMPTY_SALT)
+	}
+
+	pub fn from_ikm_salted(ikm: &[u8; hmac::Key::SIZE], salt: &[u8]) -> Self {
 		Self::new(hmac::digest(&hmac::Key(ikm.clone()), salt))
 	}
 
 	// TODO: introduce a new type for expanded?, clarify its size; or may be just a const or a combined type, ie KeyMac?
+	pub fn expand_no_info<const LEN: usize>(&self) -> [u8; LEN] {
+		self.expand(b"")
+	}
+
 	pub fn expand<const LEN: usize>(&self, info: &[u8]) -> [u8; LEN] {
-		assert!(LEN > 1); // TODO: would be nice to introduce a compile time type with checks
+		assert!(LEN > 1); // TODO: would be nice to introduce a compile time type with checks: by making Hkdf accept LEN instead of expand?
 
 		let n = (LEN - 1) / Digest::SIZE + 1;
 
@@ -28,14 +38,12 @@ impl Hkdf {
 			input.extend(info);
 			input.push(i as u8);
 
-			prev = hmac::digest(&self.prk.into(), &input[..]).as_bytes().to_vec();
+			prev = hmac::digest(&self.prk.into(), &input).as_bytes().to_vec();
 			res.extend(prev.clone());
 		} 
 
 		res[..LEN].try_into().unwrap()
 	}
-	// TODO: introduce extract: fn extract(salt, ikm) -> prk
-	// TODO: introduce expand: fn expand(prk, info, len) -> [u8; len] (OKM, output key marerial)
 }
 
 #[cfg(test)]
@@ -58,7 +66,7 @@ mod tests {
 		let key = [1u8; 32];
 		let salt = b"0".to_owned();
 
-		let res = Hkdf::new_from_ikm(&key, &salt).expand::<80>(b"SecureMessenger");
+		let res = Hkdf::from_ikm_salted(&key, &salt).expand::<80>(b"SecureMessenger");
 
 		assert_eq!(res, RES.to_owned());
 	}

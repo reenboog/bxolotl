@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKey, SignedPublicKeyX448}, signed_key_pair::{SignedKeyPair, SignedKeyPairX448}, master_key::{self, MasterKey, derive}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, public_key, message_key, x448::{KeyPairX448, PublicKeyX448}};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -105,7 +105,7 @@ impl Session {
 		their_ntru_prekey: PublicKeyNtru,
 		their_ntru_identity: PublicKeyNtru) -> Self {
 			let id = Self::derive_id(my_identity.public_key(), my_ephemeral.public_key(), &their_identity, &their_prekey);
-			let master_key = master_key::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
+			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
 			let key_exchange = KeyExchange::new(); // TODO: populate
 
 			Self { id,
@@ -135,7 +135,7 @@ impl Session {
 		their_ephemeral: PublicKeyX448,
 		their_ratchet_ntru: PublicKeyNtru) -> Self {
 			let id = Self::derive_id(&their_identity, &their_ephemeral, my_identity.public_key(), my_prekey.public_key());
-			let master_key = master_key::bob(&my_identity, &my_signed_prekey, &my_prekey, &their_identity, &their_ephemeral);
+			let master_key = MasterKey::bob(&my_identity, &my_signed_prekey, &my_prekey, &their_identity, &their_ephemeral);
 
 			Self { id,
 				role: Role::Bob, 
@@ -184,7 +184,7 @@ impl Session {
 
 			// REVIEW: do I need MasterKey at all?
 			// TODO: don't hard unwrap
-			let (ck, rk) = master_key::derive(&self.root_key, &self.my_ratchet.as_ref().unwrap(), &self.their_ratchet.as_ref().unwrap()).into(); 
+			let (ck, rk) = MasterKey::derive(&self.root_key, &self.my_ratchet.as_ref().unwrap(), &self.their_ratchet.as_ref().unwrap()).into(); 
 
 			self.send_chain_key = Some(ck);
 			self.root_key = rk;
@@ -311,7 +311,7 @@ impl Session {
 		}
 
 		// the sender used thjis ratchet for the 1st time, so let's dh-rotate
-		let (ck, rk) = master_key::derive(&self.root_key, self.my_ratchet.as_ref().unwrap(), &purported_ratchet).into();
+		let (ck, rk) = MasterKey::derive(&self.root_key, self.my_ratchet.as_ref().unwrap(), &purported_ratchet).into();
 		let current = self.receive_chain.current_mut();
 		let mut new_chain = Chain::new(purported_ratchet.clone(), ck, chain::MAX_KEYS_TO_SKIP);
 
