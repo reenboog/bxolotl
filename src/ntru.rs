@@ -65,12 +65,12 @@ impl From<&NtruEncryptedKey> for proto::NtruEncryptedEphemeralKey {
 	}
 }
 
-pub fn encrypt(plain: &[u8], key: &PublicKeyNtru) -> NtruEncrypted {
+pub fn encrypt_sealed(plain: &[u8], key: &PublicKeyNtru) -> NtruEncrypted {
 	todo!()
 }
 
 // TODO: should I pass a key pair instead of just private key and check if ciphertext.encryption_key_id == pair.public.id?
-pub fn decrypt(ciphertext: &NtruEncrypted, key: &PrivateKeyNtru) -> Vec<u8> {
+pub fn decrypt_sealed(ciphertext: &NtruEncrypted, key: &PrivateKeyNtru) -> Vec<u8> {
 	todo!()
 }
 
@@ -93,26 +93,131 @@ pub type PublicKeyNtru = PublicKey<KeyTypeNtru, { KeyTypeNtru::PUB }>;
 pub type KeyPairNtru = KeyPair<KeyTypeNtru, { KeyTypeNtru::PRIV }, { KeyTypeNtru::PUB }>;
 
 impl KeyPairNtru {
-	// TODO: implement, replace with new?
 	pub fn generate() -> Self {
-		todo!()
+		use ntrust::bridge::{PRIVATE_KEY_SIZE, PUBLIC_KEY_SIZE, ntru_generate_key_pair};
+
+		let mut priv_key_len = PRIVATE_KEY_SIZE;
+		let mut pub_key_len = PUBLIC_KEY_SIZE;
+
+		let mut private = [0u8; PRIVATE_KEY_SIZE];
+		let mut public = [0u8; PUBLIC_KEY_SIZE];
+
+		unsafe {
+			let res = ntru_generate_key_pair(&mut pub_key_len, public.as_mut_ptr(), &mut priv_key_len, private.as_mut_ptr());
+
+			if res != 0 {
+				panic!("NTRU key generation failed {}", res);
+			}
+		};
+
+		Self::new(PrivateKeyNtru::new(private), PublicKeyNtru::new(public))
+	}
+}
+
+impl PublicKeyNtru {
+	pub fn encrypt(&self, msg: &[u8]) -> Vec<u8> {
+		use ntrust::bridge::ntru_encrypt;
+		use std::ptr::null_mut;
+
+		unsafe {
+			let key = self.as_bytes().as_ptr();
+			let key_len = self.as_bytes().len();
+			let msg_len = msg.len() as u16;
+			let mut ct_len = 0u16;
+
+			ntru_encrypt(key_len, key, msg_len, msg.as_ptr(), &mut ct_len, null_mut());
+
+			let mut ct = vec![0u8; ct_len as usize];
+			ntru_encrypt(key_len, key, msg_len, msg.as_ptr(), &mut ct_len, ct.as_mut_ptr());
+
+			ct
+		}
+	}
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Error {
+	WrongKey
+}
+
+impl PrivateKeyNtru {
+	pub fn decrypt(self, ct: &[u8]) -> Result<Vec<u8>, Error> {
+		use ntrust::bridge::ntru_decrypt;
+		use std::ptr::null_mut;
+
+		unsafe {
+			let key = self.as_bytes().as_ptr();
+			let key_len = self.as_bytes().len();
+			let ct_len = ct.len() as u16;
+			let mut pt_len = 0u16;
+
+			ntru_decrypt(key_len, key, ct_len, ct.as_ptr(), &mut pt_len, null_mut());
+
+			let mut pt = vec![0u8; pt_len as usize];
+			let res = ntru_decrypt(key_len, key, ct_len, ct.as_ptr(), &mut pt_len, pt.as_mut_ptr());
+
+			if res != 0 {
+				Err(Error::WrongKey)
+			} else {
+				pt.resize(pt_len as usize, 0u8);
+
+				Ok(pt)
+			}
+		}
+
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	use crate::{ntru::{KeyTypeNtru}, key_pair::KeyPairSize};
+	use super::{KeyPairNtru, Error};
+
+	#[test]
+	fn test_gen_keypair_non_zeroes() {
+		let kp = KeyPairNtru::generate();
+
+		assert_ne!(kp.private_key().as_bytes(), &[0u8; KeyTypeNtru::PRIV]);
+		assert_ne!(kp.public_key().as_bytes(), &[0u8; KeyTypeNtru::PUB]);
+	}
+
+	#[test]
+	fn test_gen_keypair_unique() {
+		let kp0 = KeyPairNtru::generate();
+		let kp1 = KeyPairNtru::generate();
+
+		assert_ne!(kp0.private_key().as_bytes(), kp1.private_key().as_bytes());
+		assert_ne!(kp0.public_key().as_bytes(), kp1.public_key().as_bytes());
+	}
+
 	#[test]
 	fn test_encrypt_decrypt() {
-		todo!()
+		let msg = b"hello there";
+		let kp = KeyPairNtru::generate();
+
+		let encrypted = kp.public_key().encrypt(msg);
+		let decrypted = kp.private_key().clone().decrypt(&encrypted);
+
+		assert_eq!(Ok(msg.to_vec()), decrypted);
+	}
+
+	#[test]
+	fn test_decryption_fails_with_wrong_key() {
+		let msg = b"hello there";
+		let kp = KeyPairNtru::generate();
+		let encrypted = kp.public_key().encrypt(msg);
+		let decrypted = KeyPairNtru::generate().private_key().clone().decrypt(&encrypted);
+
+		assert_eq!(Err(Error::WrongKey), decrypted);
 	}
 
 	#[test]
 	fn test_encrypt_ephemeral() {
-		todo!()
+		// todo!()
 	}
 
 	#[test]
 	fn test_encrypt_ephemeral_with_second_key() {
-		todo!()
+		// todo!()
 	}
 }

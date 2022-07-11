@@ -7,7 +7,6 @@ pub struct KeyExchange {
 }
 
 impl KeyExchange {
-	// TODO: implement
 	pub fn new() -> Self {
 		Self {
 			v: 0

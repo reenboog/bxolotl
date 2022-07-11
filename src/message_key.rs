@@ -72,6 +72,7 @@ impl MessageKey {
 mod tests {
 	use super::MessageKey;
 
+	// Needs Message::serialize/deserialize first
 	#[test]
 	fn test_encrypt_decrypt() {
 		todo!()

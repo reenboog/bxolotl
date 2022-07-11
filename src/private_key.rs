@@ -3,4 +3,4 @@ use crate::key::key;
 key!(PrivateKey);
 key!(SharedKey);
 
-// TODO: introduce Into<KayPair<PrivateKey::Type, PrivateKey, PublicKey>>?
+// TODO: introduce Into<KeyPair<PrivateKey::Type, PrivateKey, PublicKey>>?

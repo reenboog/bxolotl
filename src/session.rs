@@ -222,7 +222,7 @@ impl Session {
 			match self.my_ntru_identity {
 				// in general, we double encrypt with ntru identities only, not ephemeral ntru keys
 				Some(ref kp) if kp.public_key().id() == key.payload.encryption_key_id =>  {
-					NtruEncrypted::deserialize(&ntru::decrypt(&key.payload, kp.private_key()))?
+					NtruEncrypted::deserialize(&ntru::decrypt_sealed(&key.payload, kp.private_key()))?
 				}
 				_ => return Err(Error::NoNtruIdentity)
 			}
@@ -239,7 +239,7 @@ impl Session {
 			}
 		};
 
-		Ok(NtruedKeys::deserialize(&ntru::decrypt(&ntru_encrypted, ntru_key))?)
+		Ok(NtruedKeys::deserialize(&ntru::decrypt_sealed(&ntru_encrypted, ntru_key))?)
 	}
 
 	fn decrypt_with_current_or_past_chain(&mut self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Option<Vec<u8>>, Error> {
@@ -282,7 +282,7 @@ impl Session {
 	}
 
 	// TODO: return Result
-	fn decrypt(&mut self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
+	pub fn decrypt(&mut self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
 		let msg = mac.body();
 		let purported_ratchet: PublicKeyX448; // TODO: can I get rid of this?
 		let purported_ntru_ratchet: PublicKeyNtru; // TODO: can I get rid of this?
