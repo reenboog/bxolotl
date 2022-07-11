@@ -21,6 +21,7 @@ pub mod serializable;
 pub mod x448;
 pub mod master_key;
 pub mod message_key;
+pub mod proto;
 
 #[cfg(test)]
 mod tests {

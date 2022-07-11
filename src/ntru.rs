@@ -1,5 +1,4 @@
-use crate::{aes_cbc::AesCbc, serializable::{Deserializable, self}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}};
-
+use crate::{aes_cbc::AesCbc, serializable::{Deserializable, self}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}, proto};
 // TODO: check if it's cbc
 // pub struct AesParams(AesCbc);
 
@@ -21,7 +20,9 @@ impl Deserializable for NtruedKeys {
     type Error = serializable::Error;
 
     fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
-			// TODO: protobuf implement
+			// TODO: protobuf implement:
+			// 1 proto::NtruedKeys::decode(buf)
+			// 2 TryFrom<proto:NtruedKeys>
 			todo!()
     }
 }
@@ -30,8 +31,20 @@ impl Deserializable for NtruEncrypted {
 	type Error = serializable::Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
-		// TODO: protobuf implement
+		// TODO: protobuf implement:
+		// 1 proto::NtruEncrypted::decode(buf)
+		// 2 TryFrom<proto:NtruEncrypted>
 		todo!()
+	}
+}
+
+impl From<&NtruEncrypted> for proto::NtruEncrypted {
+	fn from(src: &NtruEncrypted) -> Self {
+		Self {
+			encrypting_ntru_key_id: src.encryption_key_id,
+			ntru_encrypted_aes_params: src.aes_params.clone(),
+			aes_encrypted_data: src.payload.clone()
+		}
 	}
 }
 
@@ -40,6 +53,16 @@ pub struct NtruEncryptedKey {
 	pub key_id: u64, // ephemeral_key_id
 	pub double_encrypted: bool,
 	pub payload: NtruEncrypted // ntru_encrypted
+}
+
+impl From<&NtruEncryptedKey> for proto::NtruEncryptedEphemeralKey {
+	fn from(src: &NtruEncryptedKey) -> Self {
+		Self {
+			ephemeral_key_id: src.key_id,
+			double_encrypted: src.double_encrypted,
+			ntru_encrypted: proto::NtruEncrypted::from(&src.payload)
+		}
+	}
 }
 
 pub fn encrypt(plain: &[u8], key: &PublicKeyNtru) -> NtruEncrypted {

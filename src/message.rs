@@ -1,10 +1,18 @@
 use std::borrow::Borrow;
-
-use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448, serializable::Serializable};
+use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448, serializable::Serializable, proto};
 
 #[derive(Clone, Copy)]
 pub enum MessageType {
 	Chat, InterDevice
+}
+
+impl From<MessageType> for i32 {
+	fn from(t: MessageType) -> Self {
+		match t {
+			MessageType::Chat => 0,
+			MessageType::InterDevice => 1
+		}
+	}
 }
 
 #[derive(Clone)]
@@ -26,10 +34,26 @@ impl Message {
 	}
 }
 
+impl From<&Message> for proto::CryptoMessage {
+	fn from(src: &Message) -> Self {
+		Self {
+			ephemeral_key: src.ratchet_key.as_ref().map(|k| k.as_bytes().to_vec()),
+			counter: Some(src.counter),
+			previous_counter: Some(src.prev_counter),
+			ciphertext: Some(src.ciphrtext.clone()),
+			key_exchange: src.key_exchange.as_ref().map(|kex| kex.into()),
+			ntru_encrypted_ephemeral_key: src.ntru_encrypted_ratchet_key.as_ref().map(|k| k.into()),
+			message_type: Some(i32::from(src._type))
+		}
+	}
+}
+
 impl Serializable for Message {
 	fn serialize(&self) -> Vec<u8> {
-		// TODO: implement
-		todo!()
+		use prost::Message;
+
+		// TODO: test
+		proto::CryptoMessage::from(self).encode_to_vec()
 	}
 }
 
@@ -88,8 +112,21 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
+	use super::MessageType;
+
 	#[test]
-	fn it_workd() {
+	fn test_message_serialize_deserialize() {
 		todo!()
+	}
+
+	#[test]
+	fn test_crypto_message_from_message() {
+		todo!()
+	}
+
+	#[test]
+	fn test_message_type_to_i32() {
+		assert_eq!(i32::from(MessageType::Chat), 0);
+		assert_eq!(i32::from(MessageType::InterDevice), 1);
 	}
 }

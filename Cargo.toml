@@ -9,6 +9,9 @@ crate-type = ["lib", "staticlib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# protobuf
+prost = { version = "0.9" }
+
 # randomness
 rand = { version = "0.8.5" }
 rand-07 = { package = "rand", version = "0.7.0" }
@@ -31,3 +34,6 @@ cbc = { version = "0.1.2" }
 
 [dev-dependencies]
 hex = { version = "0.4.3" }
+
+[build-dependencies]
+prost-build = { version = "0.9" }
