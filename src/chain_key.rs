@@ -3,8 +3,8 @@ use crate::message_key::MessageKey;
 use crate::{hmac};
 
 pub struct ChainKey {
-	pub key: hmac::Key,
-	pub counter: u32
+	key: hmac::Key,
+	counter: u32
 }
 
 const SEED: &[u8] = b"SecureMessenger";
@@ -18,6 +18,10 @@ impl ChainKey {
 
 	pub fn key(&self) -> &hmac::Key {
 		&self.key
+	}
+
+	pub fn counter(&self) -> u32 {
+		self.counter
 	}
 
 	pub fn message_key(&self) -> MessageKey {
