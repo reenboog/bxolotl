@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -8,27 +8,44 @@ enum Role {
 
 #[derive(Debug)]
 enum Error {
-	NoNtruIdentity,
-	NoNtruRatchet,
+	WrongNtruIdentity,
+	UnknownNtruRatchet,
 	NtruBadEncoding,
+	NtruBadAesParams,
+	NtruBadEphemeralKey,
+	NtruWrongKey,
+	NoRatchetSupplied,
 	SkippedKeyMissing,
 	NewCounterForOldChain,
 	NewChainRequired,
 	NoCurrentChain,
+	NoLocalRatchet,
+	NoLocalNtru,
 	TooManyKeySkipped,
 	WrongAesMaterial
+}
+
+// TODO: test
+impl From<ntru::Error> for Error {
+	fn from(err: ntru::Error) -> Self {
+		match err {
+			ntru::Error::DecodeError => Self::NtruBadEncoding,
+			ntru::Error::WrongKey => Self::NtruWrongKey,
+			ntru::Error::BadAesParams => Self::NtruBadAesParams,
+			ntru::Error::WrongEphKeyLen => Self::NtruBadAesParams,  // TODO: a dedicated error?
+			ntru::Error::WrongNtruKeyLen => Self::NtruBadAesParams,
+			ntru::Error::BadNtruedFormat => Self::NtruBadEphemeralKey,
+			ntru::Error::BadNtruEncryptedFormat => Self::NtruBadEphemeralKey,
+			ntru::Error::BadNtruEncryptedKeyFormat => Self::NtruBadEphemeralKey,
+			ntru::Error::WrongNtruIdentity => Self::WrongNtruIdentity,
+			ntru::Error::UnknownNtruRatchet => Self::UnknownNtruRatchet, // TODO: a dedicated error?
+		}
+	}
 }
 
 impl From<message_key::Error> for Error {
 	fn from(_: message_key::Error) -> Self {
 		Self::WrongAesMaterial
-	}
-}
-
-impl From<serializable::Error> for Error {
-	fn from(_: serializable::Error) -> Self {
-		// TODO: is this enough?
-		Self::NtruBadEncoding
 	}
 }
 
@@ -196,7 +213,8 @@ impl Session {
 		let mut msg = Message::new();
 
 		if let Some(ref my_ntru_ratchet) = self.my_ntru_ratchet {
-			msg.set_ntru_encrypted_ratchet_key(ntru::encrypt_ephemeral(self.my_ratchet.as_ref().unwrap().public_key(), my_ntru_ratchet.public_key(), &self.their_ratchet_ntru, None));
+			// TODO: don't hard unwrap
+			msg.set_ntru_encrypted_ratchet_key(ntru::encrypt_ephemeral(self.my_ratchet.as_ref().unwrap().public_key(), my_ntru_ratchet.public_key(), ntru::EncryptionMode::Once { key: &self.their_ratchet_ntru }));
 		} else {
 			msg.set_ratchet_key(self.my_ratchet.as_ref().unwrap().public_key().clone());
 		}
@@ -217,29 +235,22 @@ impl Session {
 		mac
 	}
 
-	fn decrypt_ntru_encrypted(&self, key: &NtruEncryptedKey) -> Result<NtruedKeys, Error> {
-		let ntru_encrypted = if key.double_encrypted {
-			match self.my_ntru_identity {
-				// in general, we double encrypt with ntru identities only, not ephemeral ntru keys
-				Some(ref kp) if kp.public_key().id() == key.payload.encryption_key_id =>  {
-					NtruEncrypted::deserialize(&ntru::decrypt_sealed(&key.payload, kp.private_key()))?
-				}
-				_ => return Err(Error::NoNtruIdentity)
-			}
-		} else {
-			key.payload.clone()
+	fn decrypt_ntru_encrypted_ratchet<'a>(&'a self, eph: &NtruEncryptedKey) -> Result<NtruedKeys, Error> {
+		use ntru::DecryptionMode::{Once, Double};
+
+		let find_key = |id| -> Result<&PrivateKeyNtru, ntru::Error> {
+			// TODO: check key id? it'll fail decrypting anyway, if somethign goes wrong
+			Ok(self.receive_chain.ntru_key_pair(id).or(self.my_ntru_ratchet.as_ref()).ok_or_else(|| ntru::Error::UnknownNtruRatchet)?.private_key())
 		};
 
-		let ntru_key = if let Some(ntru_key) = self.receive_chain.ntru_key_pair(ntru_encrypted.encryption_key_id) {
-			ntru_key.private_key()
-		} else {
-			match self.my_ntru_ratchet {
-				Some(ref my_ratchet) if my_ratchet.public_key().id() == ntru_encrypted.encryption_key_id => my_ratchet.private_key(),
-				_ => return Err(Error::NoNtruRatchet)
-			}
-		};
+		if eph.double_encrypted {
+			// second key is the outer key, while the first key is the inner one, ie `encrypt(encrypt(data, first), second)
+			let second_key = self.my_ntru_identity.as_ref().ok_or_else(|| Error::NoLocalNtru)?.private_key();
 
-		Ok(NtruedKeys::deserialize(&ntru::decrypt_sealed(&ntru_encrypted, ntru_key))?)
+			Ok(ntru::decrypt_ephemeral(eph, Double { second_key, first_key: Box::new(find_key) })?)
+		} else {
+			Ok(ntru::decrypt_ephemeral::<ntru::KeySource>(eph, Once { key: find_key(eph.payload.encryption_key_id)? })?)
+		}
 	}
 
 	fn decrypt_with_current_or_past_chain(&mut self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Option<Vec<u8>>, Error> {
@@ -288,15 +299,12 @@ impl Session {
 		let purported_ntru_ratchet: PublicKeyNtru; // TODO: can I get rid of this?
 
 		if let Some(ntru_encrypted_ratchet) = msg.ntru_encrypted_ratchet_key() {
-			// TODO: do not hard unwrap
-			// TODO: move to NtruEncryptedKey's impl?
-			let NtruedKeys { ephemeral, ntru } = self.decrypt_ntru_encrypted(ntru_encrypted_ratchet).unwrap();
+			let NtruedKeys { ephemeral, ntru } = self.decrypt_ntru_encrypted_ratchet(ntru_encrypted_ratchet)?;
 
 			purported_ratchet = ephemeral;
 			purported_ntru_ratchet = ntru;
 		} else {
-			// TODO: don't hard unwrap
-			purported_ratchet = msg.ratchet_key().unwrap().clone();
+			purported_ratchet = msg.ratchet_key().ok_or_else(|| Error::NoCurrentChain)?.clone();
 			purported_ntru_ratchet = self.their_ratchet_ntru.clone();
 		}
 
@@ -305,13 +313,10 @@ impl Session {
 			return Ok(decrypted);
 		}
 
-		if self.my_ratchet.is_none() {
-			// TODO: return Err
-			panic!("my ratchet shouldn't be null at this moment")
-		}
+		let my_ratchet = self.my_ratchet.as_ref().ok_or_else(|| Error::NoLocalRatchet)?;
 
-		// the sender used thjis ratchet for the 1st time, so let's dh-rotate
-		let (ck, rk) = MasterKey::derive(&self.root_key, self.my_ratchet.as_ref().unwrap(), &purported_ratchet).into();
+		// the sender used this ratchet for the 1st time, so let's dh-rotate
+		let (ck, rk) = MasterKey::derive(&self.root_key, my_ratchet, &purported_ratchet).into();
 		let current = self.receive_chain.current_mut();
 		let mut new_chain = Chain::new(purported_ratchet.clone(), ck, chain::MAX_KEYS_TO_SKIP);
 
