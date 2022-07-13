@@ -1,5 +1,5 @@
 use prost::Message;
-use crate::{aes_cbc::{AesCbc, self}, serializable::{Deserializable, self, Serializable}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}, proto, receive_chain::ReceiveChain};
+use crate::{aes_cbc::{AesCbc, self}, serializable::{Deserializable, Serializable}, private_key::PrivateKey, public_key::PublicKey, x448::PublicKeyX448, key_pair::{KeyPairSize, KeyPair}, proto};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
@@ -24,9 +24,9 @@ impl From<aes_cbc::Error> for Error {
 #[derive(Clone)]
 pub struct NtruEncrypted {
 	pub encryption_key_id: u64, // encrypting_ntru_key_id
-	pub aes_params: Vec<u8>, // ntru_encrypted_aes_params; TODO: why keep encoded?
+	pub aes_params: Vec<u8>, // ntru_encrypted_aes_params 
 	// decrypts to either another NtruEncrypted or to straight to NtruedKeys
-	pub payload: Vec<u8> // aes_encrypted_data; TODO: why keep encoded?
+	pub payload: Vec<u8> // aes_encrypted_data
 }
 
 // TODO: test
@@ -326,8 +326,8 @@ impl PrivateKeyNtru {
 
 #[cfg(test)]
 mod tests {
-	use crate::{ntru::{KeyTypeNtru}, key_pair::KeyPairSize};
-	use super::{KeyPairNtru, Error, encrypt_sealed, decrypt_sealed};
+	use crate::{ntru::{KeyTypeNtru, PrivateKeyNtru}, key_pair::KeyPairSize, x448::{KeyPairX448}};
+	use super::{KeyPairNtru, Error, encrypt_sealed, decrypt_sealed, encrypt_ephemeral, decrypt_ephemeral, KeySource, EncryptionMode, DecryptionMode};
 
 	#[test]
 	fn test_gen_keypair_non_zeroes() {
@@ -348,7 +348,7 @@ mod tests {
 
 	#[test]
 	fn test_encrypt_decrypt() {
-		let msg = b"hello there";
+		let msg = b"Hey, Carlos";
 		let kp = KeyPairNtru::generate();
 
 		let encrypted = kp.public_key().encrypt(msg);
@@ -358,8 +358,8 @@ mod tests {
 	}
 
 	#[test]
-	fn test_decryption_fails_with_wrong_key() {
-		let msg = b"hello there";
+	fn test_decrypt_fails_with_wrong_key() {
+		let msg = b"Don't forget to run regularly";
 		let kp = KeyPairNtru::generate();
 		let encrypted = kp.public_key().encrypt(msg);
 		let decrypted = KeyPairNtru::generate().private_key().decrypt(&encrypted);
@@ -369,7 +369,7 @@ mod tests {
 
 	#[test]
 	fn test_encrypt_decrypt_sealed() {
-		let msg = b"still there?";
+		let msg = b"And your kudos are appreciated also!";
 		let kp = KeyPairNtru::generate();
 		let sealed = encrypt_sealed(msg, kp.public_key());
 		let unsealed = decrypt_sealed(&sealed, kp.private_key());
@@ -378,8 +378,8 @@ mod tests {
 	}
 
 	#[test]
-	fn test_decryption_sealed_fails_with_frong_key() {
-		let msg = b"still there?";
+	fn test_decrypt_sealed_fails_with_wrong_key() {
+		let msg = b"Thanks";
 		let kp = KeyPairNtru::generate();
 		let sealed = encrypt_sealed(msg, kp.public_key());
 		let unsealed = decrypt_sealed(&sealed, KeyPairNtru::generate().private_key());
@@ -388,12 +388,156 @@ mod tests {
 	}
 
 	#[test]
-	fn test_encrypt_ephemeral() {
-		todo!()
+	fn test_encrypt_decrypt_ephemeral_mode_once() -> Result<(), Error> {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp = KeyPairNtru::generate();
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Once { key: kp.public_key() });
+		let decrypted = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp.private_key() })?;
+
+		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
+		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+
+		Ok(())
 	}
 
 	#[test]
-	fn test_encrypt_ephemeral_with_second_key() {
-		todo!()
+	fn test_decrypt_ephemeral_mode_once_fails_with_wrong_key() {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp = KeyPairNtru::generate();
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Once { key: kp.public_key() });
+		let decrypted = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: KeyPairNtru::generate().private_key() });
+
+		assert_eq!(decrypted.err(), Some(Error::WrongKey));
+	}
+
+	#[test]
+	fn test_encrypt_decrypt_ephemeral_mode_double() -> Result<(), Error> {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp_first = KeyPairNtru::generate();
+		let kp_second = KeyPairNtru::generate();
+
+		let find_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(kp_first.private_key())
+		};
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Double { first_key: kp_first.public_key(), second_key: kp_second.public_key() });
+		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
+
+		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
+		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_decrypt_ephemeral_mode_double_fails_with_wrong_keys() -> Result<(), Error> {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp_first = KeyPairNtru::generate();
+		let kp_second = KeyPairNtru::generate();
+		let wrong_first_kp = KeyPairNtru::generate();
+		let wrong_second_kp = KeyPairNtru::generate();
+
+		let find_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(kp_first.private_key())
+		};
+
+		let find_wrong_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(wrong_first_kp.private_key())
+		};
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Double { first_key: kp_first.public_key(), second_key: kp_second.public_key() });
+		let failed_with_wrong_second_key = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: wrong_second_kp.private_key(), first_key: Box::new(find_key) });
+
+		assert_eq!(failed_with_wrong_second_key.err(), Some(Error::WrongKey));
+
+		let failed_with_wrong_first_key = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_wrong_key) });
+
+		assert_eq!(failed_with_wrong_first_key.err(), Some(Error::WrongKey));
+
+		// make sure it actually decrypts
+		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
+
+		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
+		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_decrypt_ephemeral_mode_once_fails_as_wrong_mode() -> Result<(), Error> {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp_first = KeyPairNtru::generate();
+		let kp_second = KeyPairNtru::generate();
+
+		let first_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(kp_first.private_key())
+		};
+
+		let second_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(kp_second.private_key())
+		};
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Once { key: kp_first.public_key() });
+
+		// decrypted the inner buffer, but failed to deserialize the outer NtruEncrypted
+		let correct_first_second_as_first  = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_first.private_key(), first_key: Box::new(first_key) });
+		assert_eq!(correct_first_second_as_first.err(), Some(Error::BadNtruEncryptedFormat));
+
+		// decrypted the inner buffer, but failed to deserialize the outer NtruEncrypted
+		let correct_first_wrong_second  = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_first.private_key(), first_key: Box::new(second_key) });
+		assert_eq!(correct_first_wrong_second.err(), Some(Error::BadNtruEncryptedFormat));
+
+		// fails with the first buffer, so it's a generic `WrongKey`
+		let wrong_first_second_as_first  = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(first_key) });
+		assert_eq!(wrong_first_second_as_first.err(), Some(Error::WrongKey));
+
+		// fails with the first buffer, so it's a generic `WrongKey`
+		let wrong_first_wrong_second  = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(second_key) });
+		assert_eq!(wrong_first_wrong_second.err(), Some(Error::WrongKey));
+
+		// make sure it actually decrypts
+		let decrypted = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp_first.private_key() })?;
+
+		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
+		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_decrypt_ephemeral_mode_double_fails_as_wrong_mode() -> Result<(), Error> {
+		let eph = KeyPairX448::generate();
+		let ntru = KeyPairNtru::generate();
+		let kp_first = KeyPairNtru::generate();
+		let kp_second = KeyPairNtru::generate();
+
+		let find_key = |_| -> Result<&PrivateKeyNtru, Error> {
+			Ok(kp_first.private_key())
+		};
+
+		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Double { first_key: kp_first.public_key(), second_key: kp_second.public_key() });
+		
+		// first should go inside, so it's a generic `WrongKey`
+		let correct_first = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp_first.private_key() });
+		assert_eq!(correct_first.err(), Some(Error::WrongKey));
+
+		// the outer layer decrypts fine, but there should be one more NtruEncrypted, not NtruedKeys
+		let correct_second = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp_second.private_key() });
+		assert_eq!(correct_second.err(), Some(Error::BadNtruedFormat));
+
+		// make sure it actually decrypts
+		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
+
+		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
+		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+
+		Ok(())
 	}
 }
