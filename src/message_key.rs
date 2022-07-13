@@ -47,7 +47,7 @@ impl MessageKey {
 
 impl MessageKey {
 	pub fn encrypt(&self, plaintext: &[u8], msg: &mut Message) -> AxolotlMac {
-		let aes = AesCbc::new(&self.enc_key, &self.iv);
+		let aes = AesCbc::new(self.enc_key, self.iv);
 		let ct = aes.encrypt(plaintext);
 
 		msg.set_ciphrtext(&ct);
@@ -61,7 +61,7 @@ impl MessageKey {
 		if !hmac::verify(&mac.body().serialize(), &self.mac_key, mac.mac()) {
 			Err(Error::WrongMac)
 		} else {
-			let aes = AesCbc::new(&self.enc_key, &self.iv);
+			let aes = AesCbc::new(self.enc_key, self.iv);
 
 			Ok(aes.decrypt(mac.body().ciphrtext())?)
 		}
