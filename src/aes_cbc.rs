@@ -56,8 +56,8 @@ impl AesCbc {
 		Encryptor::new(&self.key.0.into(), &self.iv.0.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext)
 	}
 
-	pub fn decrypt(&self, ciphrtext: &[u8]) -> Result<Vec<u8>, Error> {
-		Ok(Decryptor::new(&self.key.0.into(), &self.iv.0.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphrtext)?)
+	pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
+		Ok(Decryptor::new(&self.key.0.into(), &self.iv.0.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphertext)?)
 	}
 }
 
@@ -77,7 +77,7 @@ impl TryFrom<Vec<u8>> for Key {
 
 	// TODO: unify via `std::array::TryFromSliceError` instead?
 	fn try_from(buf: Vec<u8>) -> Result<Key, Self::Error> {
-		Ok(Self(TryInto::<[u8; Self::SIZE]>::try_into(buf.as_slice()).or_else(|_| Err(Error::WrongKeyLen))?))
+		Ok(Self(TryInto::<[u8; Self::SIZE]>::try_into(buf.as_slice()).or(Err(Error::WrongKeyLen))?))
 	}
 }
 
@@ -87,7 +87,7 @@ impl TryFrom<Vec<u8>> for Iv {
 
 	// TODO: unify via `std::array::TryFromSliceError` instead?
 	fn try_from(buf: Vec<u8>) -> Result<Iv, Self::Error> {
-		Ok(Self(TryInto::<[u8; Self::SIZE]>::try_into(buf.as_slice()).or_else(|_| Err(Error::WrongIvLen))?))
+		Ok(Self(TryInto::<[u8; Self::SIZE]>::try_into(buf.as_slice()).or(Err(Error::WrongIvLen))?))
 	}
 }
 
@@ -113,7 +113,7 @@ impl Deserializable for AesCbc {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Ok(Self::try_from(proto::AesParams::decode(buf).or_else(|_| Err(Error::BadAesParamsFormat))?)?)
+		Ok(Self::try_from(proto::AesParams::decode(buf).or(Err(Error::BadAesParamsFormat))?)?)
   }
 }
 
