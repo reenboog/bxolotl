@@ -50,7 +50,7 @@ impl MessageKey {
 		let aes = AesCbc::new(self.enc_key, self.iv);
 		let ct = aes.encrypt(plaintext);
 
-		msg.set_ciphrtext(&ct);
+		msg.set_ciphertext(&ct);
 
 		let mac = hmac::digest(&self.mac_key, &msg.serialize());
 
@@ -63,7 +63,7 @@ impl MessageKey {
 		} else {
 			let aes = AesCbc::new(self.enc_key, self.iv);
 
-			Ok(aes.decrypt(mac.body().ciphrtext())?)
+			Ok(aes.decrypt(mac.body().ciphertext())?)
 		}
 	}
 }

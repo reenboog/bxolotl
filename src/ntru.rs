@@ -65,7 +65,7 @@ impl Deserializable for NtruEncrypted {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
-		Ok(Self::try_from(proto::NtruEncrypted::decode(buf).or_else(|_| Err(Error::BadNtruEncryptedFormat))?)?)
+		Ok(Self::try_from(proto::NtruEncrypted::decode(buf).or(Err(Error::BadNtruEncryptedFormat))?)?)
 	}
 }
 
@@ -97,8 +97,8 @@ impl TryFrom<proto::NtruEd448KeyPair> for NtruedKeys {
 	type Error = Error;
 
 	fn try_from(value: proto::NtruEd448KeyPair) -> Result<Self, Self::Error> {
-		let ephemeral = PublicKeyX448::try_from(value.ephemeral_key).or_else(|_| Err(Error::WrongEphKeyLen))?;
-		let ntru = PublicKeyNtru::try_from(value.ntru_key).or_else(|_| Err(Error::WrongNtruKeyLen))?;
+		let ephemeral = PublicKeyX448::try_from(value.ephemeral_key).or(Err(Error::WrongEphKeyLen))?;
+		let ntru = PublicKeyNtru::try_from(value.ntru_key).or(Err(Error::WrongNtruKeyLen))?;
 
 		Ok(Self { ephemeral, ntru })
 	}
@@ -109,7 +109,7 @@ impl Deserializable for NtruedKeys {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Ok(Self::try_from(proto::NtruEd448KeyPair::decode(buf).or_else(|_| Err(Error::BadNtruedFormat))?)?)
+		Ok(Self::try_from(proto::NtruEd448KeyPair::decode(buf).or(Err(Error::BadNtruedFormat))?)?)
 	}
 }
 
@@ -152,7 +152,7 @@ impl Deserializable for NtruEncryptedKey {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Ok(Self::try_from(proto::NtruEncryptedEphemeralKey::decode(buf).or_else(|_| Err(Error::BadNtruEncryptedKeyFormat))?)?)
+		Ok(Self::try_from(proto::NtruEncryptedEphemeralKey::decode(buf).or(Err(Error::BadNtruEncryptedKeyFormat))?)?)
 	}
 }
 

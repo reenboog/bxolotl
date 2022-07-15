@@ -1,16 +1,41 @@
 use std::borrow::Borrow;
-use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448, serializable::Serializable, proto};
+use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX448, serializable::{Serializable, Deserializable}, proto};
 
 #[derive(Clone, Copy)]
 pub enum MessageType {
 	Chat, InterDevice
 }
 
+pub enum Error {
+	BadFormat,
+	NoCounter,
+	NoPrevCounter,
+	NoCiphertext,
+	NoMessageType,
+	UnknownType
+}
+
+// TODO: test
 impl From<MessageType> for i32 {
 	fn from(t: MessageType) -> Self {
 		match t {
 			MessageType::Chat => 0,
 			MessageType::InterDevice => 1
+		}
+	}
+}
+
+// TODO: test
+impl TryFrom<i32> for MessageType {
+	type Error = Error;
+
+	fn try_from(value: i32) -> Result<Self, Self::Error> {
+		use MessageType::{Chat, InterDevice};
+
+		match value {
+			0 => Ok(Chat),
+			1 => Ok(InterDevice),
+			_ => Err(Error::UnknownType)
 		}
 	}
 }
@@ -22,7 +47,7 @@ pub struct Message {
 	// TODO: should it be optional? – yes, it's either ratchet_key or ntru_encrypted_ratchet_key
 	ratchet_key: Option<PublicKeyX448>, // TODO: union/enum for ntru encrypted? TODO: introduce Cow?
 	ntru_encrypted_ratchet_key: Option<NtruEncryptedKey>,
-	ciphrtext: Vec<u8>, // TODO: introduce a type?
+	ciphertext: Vec<u8>,
 	key_exchange: Option<KeyExchange>,
 	_type: MessageType, // TODO: rename
 }
@@ -40,7 +65,7 @@ impl From<&Message> for proto::CryptoMessage {
 			ephemeral_key: src.ratchet_key.as_ref().map(|k| k.as_bytes().to_vec()),
 			counter: Some(src.counter),
 			previous_counter: Some(src.prev_counter),
-			ciphertext: Some(src.ciphrtext.clone()),
+			ciphertext: Some(src.ciphertext.clone()),
 			key_exchange: src.key_exchange.as_ref().map(|kex| kex.into()),
 			ntru_encrypted_ephemeral_key: src.ntru_encrypted_ratchet_key.as_ref().map(|k| k.into()),
 			message_type: Some(i32::from(src._type))
@@ -48,12 +73,39 @@ impl From<&Message> for proto::CryptoMessage {
 	}
 }
 
+// TODO: test
 impl Serializable for Message {
 	fn serialize(&self) -> Vec<u8> {
 		use prost::Message;
 
-		// TODO: test
 		proto::CryptoMessage::from(self).encode_to_vec()
+	}
+}
+
+
+impl TryFrom<proto::CryptoMessage> for Message {
+	type Error = Error;
+
+	fn try_from(value: proto::CryptoMessage) -> Result<Self, Self::Error> {
+		Ok(Self {
+			counter: value.counter.ok_or(Error::NoCounter)?,
+			prev_counter: value.previous_counter.ok_or(Error::NoCounter)?,
+			ratchet_key: todo!(), // TODO: introduce RatchetMode { raw, ntru_encrypted }?
+			ntru_encrypted_ratchet_key: todo!(),
+			ciphertext: value.ciphertext.ok_or(Error::NoCiphertext)?,
+			key_exchange: todo!(), // TODO: convert
+			_type: MessageType::try_from(value.message_type.ok_or(Error::NoMessageType)?)?
+		})
+	}
+}
+
+impl Deserializable for Message {
+	type Error = Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
+		use prost::Message;
+
+		Ok(Self::try_from(proto::CryptoMessage::decode(buf).or(Err(Error::BadFormat))?)?)
 	}
 }
 
@@ -101,12 +153,12 @@ impl Message {
 		self.key_exchange = kex;
 	}
 
-	pub fn ciphrtext(&self) -> &[u8] {
-		&self.ciphrtext
+	pub fn ciphertext(&self) -> &[u8] {
+		&self.ciphertext
 	}
 
-	pub fn set_ciphrtext(&mut self, ct: &[u8]) {
-		self.ciphrtext = ct.to_vec();
+	pub fn set_ciphertext(&mut self, ct: &[u8]) {
+		self.ciphertext = ct.to_vec();
 	}
 }
 

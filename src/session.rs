@@ -240,12 +240,12 @@ impl Session {
 
 		let find_key = |id| -> Result<&PrivateKeyNtru, ntru::Error> {
 			// TODO: check key id? it'll fail decrypting anyway, if somethign goes wrong
-			Ok(self.receive_chain.ntru_key_pair(id).or(self.my_ntru_ratchet.as_ref()).ok_or_else(|| ntru::Error::UnknownNtruRatchet)?.private_key())
+			Ok(self.receive_chain.ntru_key_pair(id).or(self.my_ntru_ratchet.as_ref()).ok_or(ntru::Error::UnknownNtruRatchet)?.private_key())
 		};
 
 		if eph.double_encrypted {
 			// second key is the outer key, while the first key is the inner one, ie `encrypt(encrypt(data, first), second)
-			let second_key = self.my_ntru_identity.as_ref().ok_or_else(|| Error::NoLocalNtru)?.private_key();
+			let second_key = self.my_ntru_identity.as_ref().ok_or(Error::NoLocalNtru)?.private_key();
 
 			Ok(ntru::decrypt_ephemeral(eph, Double { second_key, first_key: Box::new(find_key) })?)
 		} else {
@@ -304,7 +304,7 @@ impl Session {
 			purported_ratchet = ephemeral;
 			purported_ntru_ratchet = ntru;
 		} else {
-			purported_ratchet = msg.ratchet_key().ok_or_else(|| Error::NoCurrentChain)?.clone();
+			purported_ratchet = msg.ratchet_key().ok_or(Error::NoCurrentChain)?.clone();
 			purported_ntru_ratchet = self.their_ratchet_ntru.clone();
 		}
 
@@ -313,7 +313,7 @@ impl Session {
 			return Ok(decrypted);
 		}
 
-		let my_ratchet = self.my_ratchet.as_ref().ok_or_else(|| Error::NoLocalRatchet)?;
+		let my_ratchet = self.my_ratchet.as_ref().ok_or(Error::NoLocalRatchet)?;
 
 		// the sender used this ratchet for the 1st time, so let's dh-rotate
 		let (ck, rk) = MasterKey::derive(&self.root_key, my_ratchet, &purported_ratchet).into();
