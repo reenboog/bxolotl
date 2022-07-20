@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, MessageType}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -112,18 +112,25 @@ impl Serializable for AxolotlMac {
 impl Session {
 	pub fn alice(my_identity: KeyPairX448, 
 		my_ephemeral: KeyPairX448,
-		my_signing_identity: SignedKeyPairX448,
+		my_signing_identity: KeyPairEd448,
 		my_ntru_identity: KeyPairNtru,
 		my_ntru_ratchet: KeyPairNtru,
 		their_identity: PublicKeyX448,
 		their_signed_prekey: SignedPublicKeyX448,
 		their_prekey: PublicKeyX448,
-		their_prekey_id: u64,	// combine with prekey? make i64?
 		their_ntru_prekey: PublicKeyNtru,
 		their_ntru_identity: PublicKeyNtru) -> Self {
+			
 			let id = Self::derive_id(my_identity.public_key(), my_ephemeral.public_key(), &their_identity, &their_prekey);
 			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
-			let key_exchange = KeyExchange::new(); // FIXME: populate
+			let key_exchange = KeyExchange {
+				x448_identity: my_identity.public_key().clone(),
+				ntru_encrypted_ephemeral: ntru::encrypt_ephemeral(my_ephemeral.public_key(), my_ntru_ratchet.public_key(), ntru::EncryptionMode::Double { first_key: &their_ntru_prekey, second_key: &their_ntru_identity }),
+				ntru_identity: my_ntru_identity.public_key().clone(),
+				ed448_identity: my_signing_identity.public_key().clone(),
+				signed_prekey_id: their_signed_prekey.key().id(),
+				x448_prekey_id: their_prekey.id()
+			};
 
 			Self { id,
 				role: Role::Alice,
@@ -189,7 +196,7 @@ impl Session {
 
 impl Session {
 	// TODO: return result
-	pub fn encrypt(&mut self, plaintext: &[u8], message_type: MessageType) -> AxolotlMac {
+	pub fn encrypt(&mut self, plaintext: &[u8], message_type: Type) -> AxolotlMac {
 		if self.my_ratchet.is_none() {
 			if self.ratchet_counter == RATCHETS_BETWEEN_NTRU {
 				self.ratchet_counter = 0;
@@ -210,7 +217,7 @@ impl Session {
 			self.counter = 0;
 		}
 
-		let mut msg = Message::new();
+		let mut msg = Message::new(message_type);
 
 		if let Some(ref my_ntru_ratchet) = self.my_ntru_ratchet {
 			// TODO: don't hard unwrap
@@ -221,8 +228,7 @@ impl Session {
 
 		msg.set_counter(self.counter);
 		msg.set_prev_counter(self.prev_counter);
-		msg.set_type(message_type);
-		msg.set_key_exchange(self.unacked_key_exchange);
+		msg.set_key_exchange(self.unacked_key_exchange.clone());
 
 		// TODO: don't hard unwrap
 		let mk = self.send_chain_key.as_ref().unwrap().message_key(); 
