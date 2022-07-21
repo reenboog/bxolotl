@@ -22,6 +22,7 @@ pub mod x448;
 pub mod master_key;
 pub mod message_key;
 pub mod proto;
+pub mod id;
 
 #[cfg(test)]
 mod tests {

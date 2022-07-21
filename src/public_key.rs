@@ -1,12 +1,11 @@
-use sha2::{Sha256, Digest};
-use crate::key::key;
+use crate::{key::key, id};
 
 key!(PublicKey);
 
 impl<T, const SIZE: usize> PublicKey<T, SIZE> {
 	// TODO: should it be i64 or u64? On iOS, protobuf definitions are mapped to UInt64
 	pub fn id(&self) -> u64 {
-		u64::from_be_bytes(Sha256::digest(self.bytes).to_vec()[..8].try_into().unwrap())
+		id::from_bytes(&self.bytes)
 	}
 }
 

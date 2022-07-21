@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -183,14 +183,7 @@ impl Session {
 		alice_ephemeral: &PublicKeyX448,
 		bob_identity: &PublicKeyX448,
 		bob_prekey: &PublicKeyX448) -> u64 {
-			// TODO: implement
-			// TODO: test
-			// const auto buffer = concat_bytes({ alice_identity.key(), alice_ephemeral.key(), bob_identity.key(), bob_prekey.key() });
-			// return bytes_to_long(buffer);
-			// let bytes = alice_identity.as_bytes() + alice_ephemeral.as_bytes();
-			// TODO: introduce a helper method or trait
-			// u64::from_be_bytes(Sha256::digest(bytes).to_vec()[..8].try_into().unwrap())
-			todo!();
+		id::from_bytes(&[alice_identity, alice_ephemeral, bob_identity, bob_prekey].map(|k| k.as_bytes().to_owned()).concat())
 	}
 }
 
