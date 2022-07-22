@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, proto};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -99,13 +99,7 @@ impl AxolotlMac {
 	}
 
 	pub fn mac(&self) -> &Digest {
-		&&self.mac
-	}
-}
-
-impl Serializable for AxolotlMac {
-	fn serialize(&self) -> Vec<u8> {
-			todo!()
+		&self.mac
 	}
 }
 
@@ -179,10 +173,7 @@ impl Session {
 			}
 	}
 
-	fn derive_id(alice_identity: &PublicKeyX448,
-		alice_ephemeral: &PublicKeyX448,
-		bob_identity: &PublicKeyX448,
-		bob_prekey: &PublicKeyX448) -> u64 {
+	fn derive_id(alice_identity: &PublicKeyX448, alice_ephemeral: &PublicKeyX448, bob_identity: &PublicKeyX448, bob_prekey: &PublicKeyX448) -> u64 {
 		id::from_bytes(&[alice_identity, alice_ephemeral, bob_identity, bob_prekey].map(|k| k.as_bytes().to_owned()).concat())
 	}
 }
@@ -347,16 +338,24 @@ impl Session {
 	}
 }
 
-#[test]
-fn test_fail_when_skipped_too_many_keys() {
-	todo!()
-}
-
 #[cfg(test)]
 mod tests {
+	use crate::x448::PublicKeyX448;
+	use super::Session;
+
 	#[test]
-	fn derive_id() {
+	fn test_fail_when_skipped_too_many_keys() {
 		todo!()
+	}
+
+	#[test]
+	fn test_derive_id() {
+		let alice_identity = PublicKeyX448::from(b"\x3e\xb7\xa8\x29\xb0\xcd\x20\xf5\xbc\xfc\x0b\x59\x9b\x6f\xec\xcf\x6d\xa4\x62\x71\x07\xbd\xb0\xd4\xf3\x45\xb4\x30\x27\xd8\xb9\x72\xfc\x3e\x34\xfb\x42\x32\xa1\x3c\xa7\x06\xdc\xb5\x7a\xec\x3d\xae\x07\xbd\xc1\xc6\x7b\xf3\x36\x09");
+		let alice_ephemeral = PublicKeyX448::from(b"\x9b\x08\xf7\xcc\x31\xb7\xe3\xe6\x7d\x22\xd5\xae\xa1\x21\x07\x4a\x27\x3b\xd2\xb8\x3d\xe0\x9c\x63\xfa\xa7\x3d\x2c\x22\xc5\xd9\xbb\xc8\x36\x64\x72\x41\xd9\x53\xd4\x0c\x5b\x12\xda\x88\x12\x0d\x53\x17\x7f\x80\xe5\x32\xc4\x1f\xa0");
+		let bob_identity = PublicKeyX448::from(b"\x5e\xa7\x96\xf3\x81\x87\x73\xc3\xd1\xdb\xa9\x99\xa7\x61\xdf\x5a\x4e\x07\x49\x7d\x2a\x59\xb1\x65\x88\x24\xa2\x3b\x66\xfd\x92\xbf\xb2\xec\xd3\xc4\xe0\xe5\x5c\xde\x28\x4c\x8f\x63\x1e\xc5\x10\xa4\x51\x06\x8a\xaf\x5c\x4b\x09\xf9");
+		let bob_prekey = PublicKeyX448::from(b"\x52\xf0\xfe\xd0\xf8\xa2\xdd\x9d\xc6\xd9\x94\x5e\x69\x5b\x27\xf5\x73\xae\x0e\x44\x92\x93\xf0\x3b\x2b\xe0\x9e\x5a\xea\xd2\x69\xff\x1e\xa0\xea\xdc\xfa\xa8\x28\x96\x6f\xac\x89\x1f\x2d\xe7\x65\xc7\x80\x86\xa6\xf2\xe4\x9e\x15\xb1");
+
+		assert_eq!(Session::derive_id(&alice_identity, &alice_ephemeral, &bob_identity, &bob_prekey), 10564198814336398762);
 	}
 
 	#[test]
