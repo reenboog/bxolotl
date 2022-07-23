@@ -1,5 +1,6 @@
 use crate::{x448::KeyPairX448, ntru::KeyPairNtru};
 
+// TODO: not used
 pub struct Prekey {
 	key_x448: KeyPairX448,
 	key_ntru: KeyPairNtru,

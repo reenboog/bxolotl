@@ -80,6 +80,18 @@ mod tests {
 	}
 
 	#[test]
+	fn test_openssl_vecs() {
+		// verified by `echo -n $VALUE-TO-DIGEST | openssl dgst -sha256 -hmac $KEY -binary | xxd -p`
+		let pt = b"value-to-digest";
+		let key = b"12345678901234567890123456789012";
+		let expected = b"\xd0\xbd\xa9\xa1\xfd\xd4\xed\xa6\xa5\x46\x38\xb7\x73\x8e\x38\x05\xeb\x26\x55\x97\xa0\xcc\x0b\xd0\xd7\xd3\x19\x4b\x20\x42\x70\xb5";
+		let key = Key(key.to_owned());
+		let mac = digest(&key, pt);
+
+		assert_eq!(mac.as_bytes(), expected);
+	}
+
+	#[test]
 	fn test_digest_same_inut_with_different_keys() {
 		let key1 = Key([123u8; KEY_SIZE]);
 		let key2 = Key([42u8; KEY_SIZE]);

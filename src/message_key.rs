@@ -52,7 +52,7 @@ impl MessageKey {
 		AxolotlMac::new(msg, &mac)
 	}
 
-	pub fn decrypt(&self, mac: &AxolotlMac) -> Result<Vec<u8>, Error>  {
+	pub fn decrypt(&self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
 		if !hmac::verify(&mac.body().serialize(), &self.mac_key, mac.mac()) {
 			Err(Error::WrongMac)
 		} else {
@@ -65,7 +65,7 @@ impl MessageKey {
 
 #[cfg(test)]
 mod tests {
-	use crate::{message::{Message, Type}, x448::KeyPairX448, hmac::Digest, serializable::Deserializable};
+	use crate::{message::{Message, Type}, x448::KeyPairX448};
 	use super::{MessageKey, Error};
 
 	#[test]
