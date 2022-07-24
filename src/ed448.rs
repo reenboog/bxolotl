@@ -1,5 +1,6 @@
 use crate::{key_pair::{KeyPairSize, KeyPair}, private_key::PrivateKey, public_key::PublicKey};
 
+#[derive(Clone)]
 pub struct Signature {
 	bytes: [u8; Self::SIZE]
 }

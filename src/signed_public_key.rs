@@ -2,6 +2,7 @@ use crate::{ed448::{Signature, PublicKeyEd448}, x448::PublicKeyX448};
 
 // TODO: make more generic?,ie any public key signed with any signing key?
 // Represents any public key signed by en Ed448Key
+#[derive(Clone)]
 pub struct SignedPublicKey {
 	key: PublicKeyX448,
 	signature: Signature
