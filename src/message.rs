@@ -44,16 +44,17 @@ impl TryFrom<i32> for Type {
 	}
 }
 
+// TODO: introduce getter & setters?
 #[derive(Clone)]
 pub struct Message {
-	counter: u32,
-	prev_counter: u32,
+	pub counter: u32,
+	pub prev_counter: u32,
 	// TODO: introduce RatchetMode { raw, ntru_encrypted }?
-	ratchet_key: Option<PublicKeyX448>,
-	ntru_encrypted_ratchet_key: Option<NtruEncryptedKey>,
-	ciphertext: Vec<u8>,
-	key_exchange: Option<KeyExchange>,
-	_type: Type,
+	pub ratchet_key: Option<PublicKeyX448>,
+	pub ntru_encrypted_ratchet_key: Option<NtruEncryptedKey>,
+	pub ciphertext: Vec<u8>,
+	pub key_exchange: Option<KeyExchange>,
+	pub _type: Type,
 }
 
 impl Message {
