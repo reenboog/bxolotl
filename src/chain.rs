@@ -104,8 +104,8 @@ impl Chain {
 		self.ntru_ratchet_key = Some(key);
 	}
 
-	pub fn remove(&mut self, counter: u32) {
-		self.skipped_keys.remove(&counter);
+	pub fn remove(&mut self, counter: u32) -> Option<Rc<MessageKey>> {
+		self.skipped_keys.remove(&counter)
 	}
 
 	pub fn has_skipped_keys(&self) -> bool {
@@ -124,11 +124,14 @@ impl Chain {
 		self.skipped_keys.get(&counter).map(|k| { k.borrow() })
 	}
 
+	// internal use only, so no need to check for max_keys_to_skip – `stage` will do the work
 	fn insert_skipped_key(&mut self, counter: u32, key: Rc<MessageKey>) {
 		self.skipped_keys.insert(counter, key);
 	}
 
 	pub fn stage(&mut self, purported_counter: u32) -> Result<Next, Error> {
+		// the sender always attaches { counter, prev_count } to each message where prev_count can't
+		// increase in the past: when a new ratchet is used, it throws away (= fixates prev_counter) the previous one
 		let max_keys = self.max_keys_to_skip;
 		let mut staged = Next::new(self);
 		let keys_to_skip = purported_counter - staged.counter();
@@ -147,34 +150,68 @@ impl Chain {
 
 #[cfg(test)]
 mod tests {
-	#[test]
-	fn it_works() {
-		todo!()
+	use std::rc::Rc;
+	use crate::{x448::{PublicKeyX448, KeyTypeX448}, chain_key::ChainKey, key_pair::KeyPairSize, hmac::Key, message_key::MessageKey};
+	use super::Chain;
+
+	const RK: [u8; KeyTypeX448::PUB] = [42u8; KeyTypeX448::PUB];
+	const CK: [u8; ChainKey::SIZE] = [11u8; ChainKey::SIZE];
+
+	fn stub_chain() -> Chain {
+		Chain::new(PublicKeyX448::from(&RK), ChainKey::new(Key::new(CK), 17), 9)
 	}
 
 	#[test]
-	fn test_get_set_ratchet_key() {
-		todo!()
+	fn test_new() {
+		let chain = stub_chain();
+
+		assert_eq!(chain.chain_key().key().as_bytes().to_owned(), CK);
+		assert_eq!(chain.ratchet_key().as_bytes().to_owned(), RK);
+		assert!(chain.ntru_ratchet_key.is_none());
+		assert!(!chain.has_skipped_keys());
+		assert_eq!(chain.next_counter(), 0);
 	}
 
 	#[test]
-	fn test_get_set_ntru_ratchet_key() {
-		todo!()
-	}
+	fn test_insert_remove_skipped_keys() {
+		let mut chain = stub_chain();
 
-	#[test]
-	fn test_has_skipped_keys() {
-		todo!()
-	}
+		// should be empty by default
+		assert!(!chain.has_skipped_keys());
 
-	#[test]
-	fn test_remove_key() {
-		todo!()
-	}
+		chain.insert_skipped_key(1, Rc::new(MessageKey::from(&[1u8; MessageKey::SIZE])));
 
-	#[test]
-	fn test_get_next_counter() {
-		todo!()
+		// lookup test
+		assert!(chain.has_skipped_keys());
+		assert!(chain.skipped_key(1).is_some());
+		assert!(chain.skipped_key(2).is_none());
+
+		chain.insert_skipped_key(2, Rc::new(MessageKey::from(&[2u8; MessageKey::SIZE])));
+
+		assert!(chain.has_skipped_keys());
+		assert!(chain.skipped_key(1).is_some());
+		assert!(chain.skipped_key(2).is_some());
+		assert!(chain.skipped_key(3).is_none());
+
+		// remove non existing
+		assert!(chain.remove(3).is_none());
+		assert!(chain.has_skipped_keys());
+		assert!(chain.skipped_key(1).is_some());
+		assert!(chain.skipped_key(2).is_some());
+		assert!(chain.skipped_key(3).is_none());
+
+		// remove existing twice
+		assert!(chain.remove(1).is_some());
+		assert!(chain.remove(1).is_none());
+		assert!(chain.has_skipped_keys());
+		assert!(chain.skipped_key(1).is_none());
+		assert!(chain.skipped_key(2).is_some());
+		assert!(chain.skipped_key(3).is_none());
+
+		// remove all and non existing
+		(1..1000).collect::<Vec<_>>().into_iter().for_each(|i| { chain.remove(i); });
+
+		assert!(!chain.has_skipped_keys());
 	}
 
 	#[test]
