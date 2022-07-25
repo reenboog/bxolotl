@@ -340,9 +340,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use std::any::Any;
-
-use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type};
+	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -460,20 +458,22 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 		ntru::decrypt_ephemeral(&kex.ntru_encrypted_ephemeral, ntru::DecryptionMode::Double { second_key: bob_ntru_identity().private_key(), first_key: Box::new(find_key) }).unwrap()
 	}
 
-	fn encrypt(session: &mut Session, msg: &[u8], msg_type: Type) -> AxolotlMac {
-		session.encrypt(msg, msg_type)
-	}
+	fn turn_ratchet(alice: &mut Session, bob: &mut Session) -> (AxolotlMac, AxolotlMac) {
+		let msg1 = alice.encrypt(b"turning", Type::Chat);
+		_ = bob.decrypt(&msg1);
 
-	fn decrypt(session: &mut Session, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
-		session.decrypt(mac)
+		let msg2 = bob.encrypt(b"turning", Type::Chat);
+		_ = alice.decrypt(&msg2);
+
+		(msg1, msg2)
 	}
 
 	#[test]
 	fn test_encrypt_decrypt() {
 		let mut alice = alice_session();
-		let a0 = encrypt(&mut alice, b"hi 0", Type::Chat);
-		let a1 = encrypt(&mut alice, b"hi 1", Type::Chat);
-		let a2 = encrypt(&mut alice, b"hi 2", Type::Chat);
+		let a0 = alice.encrypt(b"hi 0", Type::Chat);
+		let a1 = alice.encrypt(b"hi 1", Type::Chat);
+		let a2 = alice.encrypt(b"hi 2", Type::Chat);
 
 		// alice updated her internal state
 		assert_eq!(alice.counter, 3);
@@ -495,9 +495,9 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 
 		// now, bob decrypts the messages
 		let mut bob = bob_session(&a1.body.clone().key_exchange.unwrap());
-		let rcvd0 = decrypt(&mut bob, &a0).unwrap();
-		let rcvd1 = decrypt(&mut bob, &a1).unwrap();
-		let rcvd2 = decrypt(&mut bob, &a2).unwrap();
+		let rcvd0 = bob.decrypt(&a0).unwrap();
+		let rcvd1 = bob.decrypt(&a1).unwrap();
+		let rcvd2 = bob.decrypt(&a2).unwrap();
 
 		assert_eq!(rcvd0, b"hi 0");
 		assert_eq!(rcvd1, b"hi 1");
@@ -509,7 +509,7 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 		assert!(bob.unacked_key_exchange.is_none());
 
 		// make bob send a message to alice to ratchet once
-		let b0 = decrypt(&mut alice, &encrypt(&mut bob, b"hi from bob", Type::Chat)).unwrap();
+		let b0 = alice.decrypt(&bob.encrypt(b"hi from bob", Type::Chat)).unwrap();
 
 		assert_eq!(b0, b"hi from bob");
 
@@ -520,9 +520,9 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 		assert!(bob.unacked_key_exchange.is_none());
 
 		// now, alice sends a few more messages with a new ratchet
-		let a3 = encrypt(&mut alice, b"hi 3", Type::Chat);
-		let a4 = encrypt(&mut alice, b"hi 4", Type::Chat);
-		let a5 = encrypt(&mut alice, b"hi 5", Type::Chat);
+		let a3 = alice.encrypt(b"hi 3", Type::Chat);
+		let a4 = alice.encrypt(b"hi 4", Type::Chat);
+		let a5 = alice.encrypt(b"hi 5", Type::Chat);
 
 		// make sure no key exchange is present for this ratchet (attached for the first unacked messages only)
 		assert!(a3.body.key_exchange.is_none());
@@ -544,9 +544,9 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 		assert_eq!(alice.counter, 3);
 		assert_eq!(alice.prev_counter, 3);
 		
-		let rcvd3 = decrypt(&mut bob, &a3).unwrap();
-		let rcvd4 = decrypt(&mut bob, &a4).unwrap();
-		let rcvd5 = decrypt(&mut bob, &a5).unwrap();
+		let rcvd3 = bob.decrypt(&a3).unwrap();
+		let rcvd4 = bob.decrypt(&a4).unwrap();
+		let rcvd5 = bob.decrypt(&a5).unwrap();
 
 		// now bob decrypts the messages with his new derived ratchet
 		assert_eq!(rcvd3, b"hi 3");
@@ -555,8 +555,8 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 	}
 
 	#[test]
-	fn test_ensure_correct_keys_are_used_for_kex() {
-		let msg = encrypt(&mut alice_session(), b"hi", Type::Chat);
+	fn test_keys_used_for_kex() {
+		let msg = alice_session().encrypt(b"hi", Type::Chat);
 		let kex = msg.body().key_exchange.as_ref().unwrap();
 
 		// I used one of your prekeys for this session
@@ -575,6 +575,86 @@ use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyP
 		assert_eq!(kex.ntru_identity.id(), alice_ntru_identity().public_key().id());
 		// and my signing key
 		assert_eq!(kex.ed448_identity.id(), alice_ed448_identity().public_key().id());
+	}
+
+	#[test]
+	fn test_ntru_encrypt_ratchet() {
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"hi 0", Type::Chat);
+		let kex = a0.body.key_exchange.as_ref().unwrap();
+
+		// all unacked messages are to have a kex containing a double encrypted eph: first, it's 
+		// encrypted with bob's ntru prekey, then – his ntru identity
+		assert_eq!(alice.ratchet_counter, 1);
+		assert!(kex.ntru_encrypted_ephemeral.double_encrypted);
+		assert_eq!(kex.ntru_encrypted_ephemeral.payload.encryption_key_id, bob_ntru_identity().public_key().id());
+		// while initial ntru encrypted ratchet eph is never double encrypted
+		assert_eq!(a0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+		// bob's prekey is used as his first ntru ratchet to encrypt alice's eph ratchet
+		assert_eq!(a0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, bob_ntru_prekey().public_key().id());
+		// plain ratchet eph should be None, by the way
+		assert!(a0.body.ratchet_key.is_none());
+
+		let mut bob = bob_session(kex);
+		// turn once for bob to start using plain eph ratchet
+		_ = bob.decrypt(&a0);
+		// and for alice
+		_ = alice.decrypt(&bob.encrypt(b"hi, alice 0", Type::Chat));
+
+		// still 1 for alice
+		assert_eq!(alice.ratchet_counter, 1);
+		assert_eq!(bob.ratchet_counter, 1);
+
+		// turn the root key N - 1 more times, in other words right before both sides decide to exchange a new NTRU key
+		for ctr in 2..RATCHETS_BETWEEN_NTRU + 1 {
+			let (a, b) = turn_ratchet(&mut alice, &mut bob);
+
+			assert_eq!(alice.ratchet_counter, ctr);
+			assert_eq!(bob.ratchet_counter, ctr);
+			// at this point, non-ntru-encrypted ratchet shoudl be used
+			assert!(a.body.ntru_encrypted_ratchet_key.is_none());
+			assert!(a.body.ratchet_key.is_some());
+			assert!(b.body.ntru_encrypted_ratchet_key.is_none());
+			assert!(b.body.ratchet_key.is_some());
+		}
+
+		let a1 = alice.encrypt(b"this goes with a new ntru encrypted ratchet by alice", Type::Chat);
+
+		// now, on the Nth turn, alice includes a new ntru key, encrypted with bob's ntru ratchet; no plain ratchet is used
+		assert!(a1.body.ratchet_key.is_none());
+		// again, it should not be double encrypted (double encryption is used for kex only)
+		assert_eq!(a1.body.ntru_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+
+		// make sure different ephemeral keys are used between the ratchets
+		assert_ne!(a0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().key_id, a1.body.ntru_encrypted_ratchet_key.as_ref().unwrap().key_id);
+		// it's still the same old bob's ntru ratchet (= bob ntru prekey) for alice
+		assert_eq!(a1.body.ntru_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, a0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id);
+
+		_ = bob.decrypt(&a1);
+
+		// here, bob will use alice's new ntru ratchet
+		let b0 = bob.encrypt(b"this goes with a new ntru encrypted ratchet by bob", Type::Chat);
+
+		assert!(b0.body.ntru_encrypted_ratchet_key.is_some());
+		assert!(b0.body.ratchet_key.is_none());
+		// as usual, no double encryption
+		assert_eq!(b0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+		// bob's eph is encrypted with alice's most recent ntru ratchet
+		assert_eq!(b0.body.ntru_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, alice.my_ntru_ratchet.as_ref().unwrap().public_key().id());
+
+		_ = alice.decrypt(&b0);
+
+		// and finally, switch back to plain ratchets again
+		let a2 = alice.encrypt(b"now, no ntru ratchet will be used by alice", Type::Chat);
+		assert!(a2.body.ntru_encrypted_ratchet_key.is_none());
+		assert!(a2.body.ratchet_key.is_some());
+
+		// and same for bob
+		_ = bob.decrypt(&a2);
+		let b1 = bob.encrypt(b"now, this goes with a plain ratchet by bob as well", Type::Chat);
+
+		assert!(b1.body.ntru_encrypted_ratchet_key.is_none());
+		assert!(b1.body.ratchet_key.is_some());
 	}
 
 	#[test]
