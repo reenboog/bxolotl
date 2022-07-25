@@ -707,6 +707,38 @@ mod tests {
 	}
 
 	#[test]
+	fn test_dispose_chain_when_no_skipped_messages_left() {
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"hi, bob 0", Type::Chat);
+		let mut bob = bob_session(&a0.body.key_exchange.as_ref().unwrap());
+
+		_ = bob.decrypt(&a0);
+		_ = alice.decrypt(&bob.encrypt(b"hi, alice 0", Type::Chat));
+
+		// with one message sent, alice and bob each has 1 chain-sized receive chains respectively
+		assert_eq!(alice.receive_chain.len(), 1);
+		assert_eq!(bob.receive_chain.len(), 1);
+
+		// encrypt a message that will be decrypted by bob later making him preserve a chain for that
+		let a1 = alice.encrypt(b"this one will be skipped for now", Type::Chat);
+
+		_ = bob.decrypt(&alice.encrypt(b"this will be decrypted by a new chain", Type::Chat));
+		// and turn several times to swich to new ratchets
+		turn_ratchet(&mut alice, &mut bob);
+		turn_ratchet(&mut alice, &mut bob);
+
+		// there were three chains: (1) initial chain w/ skipped key, (2) no skipped, and (3) current
+		// 2 would be cleaned up immediately since it has no skipped keys and is replaced by 3 (those turn_ratchet calls)
+		assert_eq!(bob.receive_chain.len(), 2);
+		// alice doesn't have any skipped messages, so she has only one chain – current
+		assert_eq!(alice.receive_chain.len(), 1);
+
+		// decrypt bob's skipped message and ensure he only has on (current) chain left
+		_ = bob.decrypt(&a1);
+		assert_eq!(bob.receive_chain.len(), 1);
+	}
+
+	#[test]
 	fn test_fail_when_skipped_too_many_keys() {
 		// todo!()
 	}
