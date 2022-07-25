@@ -691,6 +691,22 @@ mod tests {
 	}
 
 	#[test]
+	fn test_decrypt_out_of_order() {
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"a0", Type::Chat);
+		let a1 = alice.encrypt(b"a1", Type::Chat);
+		let a2 = alice.encrypt(b"a2", Type::Chat);
+		let a3 = alice.encrypt(b"a3", Type::Chat);
+
+		let mut bob = bob_session(&a0.body.key_exchange.as_ref().unwrap());
+
+		assert_eq!(b"a3", &bob.decrypt(&a3).unwrap()[..]);
+		assert_eq!(b"a0", &bob.decrypt(&a0).unwrap()[..]);
+		assert_eq!(b"a2", &bob.decrypt(&a2).unwrap()[..]);
+		assert_eq!(b"a1", &bob.decrypt(&a1).unwrap()[..]);
+	}
+
+	#[test]
 	fn test_fail_when_skipped_too_many_keys() {
 		// todo!()
 	}
