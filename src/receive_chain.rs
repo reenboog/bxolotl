@@ -14,6 +14,10 @@ impl ReceiveChain {
 }
 
 impl ReceiveChain {
+	pub fn len(&self) -> usize {
+		self.chains.len()
+	}
+
 	pub fn current(&self) -> Option<&Chain> {
 		self.chains.front()
 	}

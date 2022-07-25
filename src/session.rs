@@ -658,6 +658,39 @@ mod tests {
 	}
 
 	#[test]
+	fn test_decrypt_skipped_ntru_ratchet() {
+		// make alice and bob turn once by sending each other 1 message each
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"hi, bob 0", Type::Chat);
+		let mut bob = bob_session(&a0.body.key_exchange.as_ref().unwrap());
+		_ = bob.decrypt(&a0);
+		_ = alice.decrypt(&&bob.encrypt(b"hi, alice 0", Type::Chat));
+
+		// now, turn N - 1 times, just before exchanging a new ntru ratchet key
+		for _ in 1..RATCHETS_BETWEEN_NTRU {
+			_ = turn_ratchet(&mut alice, &mut bob);
+		}
+
+		let msg_to_skip = b"this one goes with a new ntru ratchet by alice";
+		let a1 = alice.encrypt(msg_to_skip, Type::Chat);
+		// so, we have a message from alice with an ntru encrypted ratchet
+		assert!(a1.body.ntru_encrypted_ratchet_key.is_some());
+
+		// make alice and bob completely switch to new ratchets by turnig a lot
+		for _ in 1..RATCHETS_BETWEEN_NTRU * 5 {
+			_ = turn_ratchet(&mut alice, &mut bob);
+		}
+
+		// current and "forgotten" chains should be kept by now
+		assert_eq!(bob.receive_chain.len(), 2);
+
+		let skipped = bob.decrypt(&a1).unwrap();
+		assert_eq!(msg_to_skip, &skipped[..]);
+		// when the lost message is decrypted, its chain is disposed (given it was just one such message)
+		assert_eq!(bob.receive_chain.len(), 1);
+	}
+
+	#[test]
 	fn test_fail_when_skipped_too_many_keys() {
 		// todo!()
 	}
