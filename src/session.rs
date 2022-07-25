@@ -340,7 +340,9 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type};
+	use std::any::Any;
+
+use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -550,6 +552,29 @@ mod tests {
 		assert_eq!(rcvd3, b"hi 3");
 		assert_eq!(rcvd4, b"hi 4");
 		assert_eq!(rcvd5, b"hi 5");
+	}
+
+	#[test]
+	fn test_ensure_correct_keys_are_used_for_kex() {
+		let msg = encrypt(&mut alice_session(), b"hi", Type::Chat);
+		let kex = msg.body().key_exchange.as_ref().unwrap();
+
+		// I used one of your prekeys for this session
+		assert_eq!(kex.x448_prekey_id, bob_x448_prekey().public_key().id());
+		// as well as one of your signed prekeys
+		assert_eq!(kex.signed_prekey_id, bob_signed_prekey().public().key().id());
+		// and this is my identity in turn
+		assert_eq!(kex.x448_identity.id(), alice_x448_identity().public_key().id());
+		// my ntru-encrypted ratchet
+		assert_eq!(kex.ntru_encrypted_ephemeral.key_id, alice_ephemeral().public_key().id());
+		// it is double encrypted, by the way,
+		assert!(kex.ntru_encrypted_ephemeral.double_encrypted);
+		// with your ntru identity first (and another key on top)
+		assert_eq!(kex.ntru_encrypted_ephemeral.payload.encryption_key_id, bob_ntru_identity().public_key().id());
+		// this is my ntru identity (not used by Session actually, but we have it in protobuf)
+		assert_eq!(kex.ntru_identity.id(), alice_ntru_identity().public_key().id());
+		// and my signing key
+		assert_eq!(kex.ed448_identity.id(), alice_ed448_identity().public_key().id());
 	}
 
 	#[test]

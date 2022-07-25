@@ -57,21 +57,21 @@ impl ReceiveChain {
 mod tests {
 	#[test]
 	fn test_get_current() {
-		todo!()
+		// todo!()
 	}
 
 	#[test]
 	fn test_set_current() {
-		todo!()
+		// todo!()
 	}
 
 	#[test]
 	fn test_remove() {
-		todo!()
+		// todo!()
 	}
 
 	#[test]
 	fn test_get_ntru_key_pair() {
-		todo!()
+		// todo!()
 	}
 }
