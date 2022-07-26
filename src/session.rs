@@ -22,7 +22,8 @@ pub enum Error {
 	NoLocalRatchet,
 	NoLocalNtru,
 	TooManyKeySkipped,
-	WrongAesMaterial
+	WrongMessageKey,
+	WrongMac
 }
 
 // TODO: test
@@ -44,8 +45,11 @@ impl From<ntru::Error> for Error {
 }
 
 impl From<message_key::Error> for Error {
-	fn from(_: message_key::Error) -> Self {
-		Self::WrongAesMaterial
+	fn from(key: message_key::Error) -> Self {
+		match key {
+			message_key::Error::BadKeyMaterial => Self::WrongMessageKey,
+			message_key::Error::WrongMac => Self::WrongMac
+		}
 	}
 }
 
@@ -340,7 +344,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU, chain};
+	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU, chain, hmac};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -785,6 +789,20 @@ mod tests {
 		assert_eq!(bob.decrypt(&a1).unwrap(), b"a1");
 		assert_eq!(bob.decrypt(&a2).unwrap(), b"a2");
 		assert_eq!(bob.decrypt(&a3).unwrap(), b"a3");
+	}
+
+	#[test]
+	fn test_invalid_mac() {
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"a0", Type::Chat);
+		let mut bob = bob_session(&a0.body.key_exchange.as_ref().unwrap());
+
+		// the first one decrypts fine
+		assert_eq!(bob.decrypt(&a0).unwrap(), b"a0");
+		let mut a1 = alice.encrypt(b"a1", Type::Chat);
+		a1.mac = hmac::digest(&hmac::Key::new([42u8; 32]), b"fake message");
+
+		assert_eq!(bob.decrypt(&a1).err(), Some(Error::WrongMac));
 	}
 
 	#[test]
