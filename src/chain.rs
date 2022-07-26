@@ -133,10 +133,11 @@ impl Chain {
 		// the sender always attaches { counter, prev_count } to each message where prev_count can't
 		// increase in the past: when a new ratchet is used, it throws away (= fixates prev_counter) the previous one
 		let max_keys = self.max_keys_to_skip;
+		let skipped_len = self.skipped_keys.len() as u32;
 		let mut staged = Next::new(self);
 		let keys_to_skip = purported_counter - staged.counter();
 
-		if keys_to_skip >= max_keys {
+		if keys_to_skip + skipped_len >= max_keys {
 			return Err(Error::TooManyKeysSkipped);
 		}
 
@@ -222,6 +223,7 @@ mod tests {
 	#[test]
 	fn test_too_many_keys_skipped() {
 		// todo!()
+		// TODO: tes too many, one key consumtion and then too many again (like in axolotl tests)
 	}
 
 	#[test]

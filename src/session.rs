@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncrypted, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, serializable::{Serializable, Deserializable, self}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, proto};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, hmac::Digest, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
@@ -6,8 +6,8 @@ enum Role {
 	Alice, Bob
 }
 
-#[derive(Debug)]
-enum Error {
+#[derive(Debug, PartialEq)]
+pub enum Error {
 	WrongNtruIdentity,
 	UnknownNtruRatchet,
 	NtruBadEncoding,
@@ -55,7 +55,7 @@ impl From<chain::Error> for Error {
 	}
 }
 
-struct Session {
+pub struct Session {
 	id: u64,
 	role: Role,
 
@@ -299,7 +299,7 @@ impl Session {
 		}
 
 		// TODO: switch instead
-		if let Ok(Some(decrypted)) = self.decrypt_with_current_or_past_chain(mac, &purported_ratchet) {
+		if let Some(decrypted) = self.decrypt_with_current_or_past_chain(mac, &purported_ratchet)? {
 			return Ok(decrypted);
 		}
 
@@ -340,7 +340,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU};
+	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU, chain};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -740,7 +740,51 @@ mod tests {
 
 	#[test]
 	fn test_fail_when_skipped_too_many_keys() {
-		// todo!()
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"hi 0", Type::Chat);
+		let mut valid_messages: Vec<AxolotlMac> = (1..chain::MAX_KEYS_TO_SKIP + 1)
+				.into_iter()
+				.map(|ctr| alice.encrypt(format!("skipped {}", ctr).as_bytes(), Type::Chat)).collect();
+		let last_valid = valid_messages.pop().unwrap();
+		// this generates a message with a large counter
+		let invalid_msg = alice.encrypt(b"invalid", Type::Chat);
+		let mut bob = bob_session(&a0.body.key_exchange.as_ref().unwrap());
+
+		// the very first message decrypts just fine for it has a small ctr
+		assert_eq!(bob.decrypt(&a0).unwrap(), b"hi 0");
+		assert_eq!(bob.decrypt(&invalid_msg).err(), Some(Error::TooManyKeySkipped));
+		// this last valid one decrypts just fine
+		assert_eq!(bob.decrypt(&last_valid).unwrap(), format!("skipped {}", chain::MAX_KEYS_TO_SKIP).as_bytes());
+		// as well as this one, since we've just freed one slot to store
+		assert_eq!(bob.decrypt(&invalid_msg).unwrap(), b"invalid");
+
+		// and the process goes endlessly
+		for ctr in 0..10 {
+			// when there's one last message that can be decrypted
+			let valid = alice.encrypt(format!("skipped {}", ctr).as_bytes(), Type::Chat);
+			// while the next one fails
+			let invalid = alice.encrypt(format!("failing {}", ctr).as_bytes(), Type::Chat);
+			
+			assert_eq!(bob.decrypt(&invalid).err(), Some(Error::TooManyKeySkipped));
+			// until there's a slot to process a skipped key
+			assert_eq!(bob.decrypt(&valid).unwrap(), format!("skipped {}", ctr).as_bytes());
+			assert_eq!(bob.decrypt(&invalid).unwrap(), format!("failing {}", ctr).as_bytes());
+		}
+
+		// but then, we can decrypt all those pending messages
+		valid_messages.iter().enumerate().for_each(|(i, msg)| {
+			assert_eq!(bob.decrypt(&msg).unwrap(), format!("skipped {}", i + 1).as_bytes());
+		});
+
+		// and encrypt/decrypt new messages within this same chain
+		let a1 = alice.encrypt(b"a1", Type::Chat);
+		let a2 = alice.encrypt(b"a2", Type::Chat);
+		let a3 = alice.encrypt(b"a3", Type::Chat);
+
+		assert_eq!(bob.receive_chain.len(), 1);
+		assert_eq!(bob.decrypt(&a1).unwrap(), b"a1");
+		assert_eq!(bob.decrypt(&a2).unwrap(), b"a2");
+		assert_eq!(bob.decrypt(&a3).unwrap(), b"a3");
 	}
 
 	#[test]
