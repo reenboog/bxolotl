@@ -23,7 +23,7 @@ impl ChainKey {
 	pub const SIZE: usize = 32;
 
 	pub fn new(key: hmac::Key, counter: u32) -> Self {
-		Self { key: key, counter }
+		Self { key, counter }
 	}
 
 	pub fn key(&self) -> &hmac::Key {

@@ -70,7 +70,7 @@ pub fn dh_exchange(private: &PrivateKeyX448, public: &PublicKeyX448) -> SharedKe
 	let public = PublicKey::from(public);
 	let shared = private.as_diffie_hellman(&public).unwrap();
 
-	SharedKeyX448::new(shared.as_bytes().clone())
+	SharedKeyX448::new(*shared.as_bytes())
 }
 
 #[cfg(test)]

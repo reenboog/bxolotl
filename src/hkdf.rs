@@ -17,7 +17,7 @@ impl Hkdf {
 
 	// TODO: rename and reflect it's a fixed-size Key, not salt?
 	pub fn from_ikm_salted(ikm: &[u8], salt: &[u8; hmac::Key::SIZE]) -> Self {
-		Self::new(hmac::digest(&hmac::Key::new(salt.clone()), ikm))
+		Self::new(hmac::digest(&hmac::Key::new(*salt), ikm))
 	}
 
 	// TODO: introduce a new type for expanded?, clarify its size; or may be just a const or a combined type, ie KeyMac?

@@ -37,13 +37,13 @@ impl From<Digest> for Key {
 
 impl From<&[u8; Key::SIZE]> for Key {
 	fn from(slice: &[u8; Key::SIZE]) -> Self {
-		Self(slice.clone())
+		Self(*slice)
 	}
 }
 
 impl From<&[u8; Digest::SIZE]> for Digest {
 	fn from(slice: &[u8; Digest::SIZE]) -> Self {
-		Self(slice.clone())
+		Self(*slice)
 	}
 }
 

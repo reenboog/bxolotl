@@ -95,7 +95,7 @@ pub struct AxolotlMac {
 
 impl AxolotlMac {
 	pub fn new(body: &Message, mac: &Digest) -> Self {
-		Self { body: body.clone(), mac: mac.clone() }
+		Self { body: body.clone(), mac: *mac }
 	}
 
 	pub fn body(&self) -> &Message {
@@ -142,7 +142,7 @@ impl Session {
 				their_ratchet_ntru: their_ntru_prekey,
 				unacked_key_exchange: Some(key_exchange),
 				alice_base_ephemeral_key: None, // REVIEW: move to role? It makes sense for Bob only anyway
-				root_key: master_key.root_key().clone(),
+				root_key: *master_key.root_key(),
 				send_chain_key: None, 
 				receive_chain: ReceiveChain::new() // REVIEW: make optional?
 			}
@@ -168,10 +168,10 @@ impl Session {
 				my_ratchet: Some(my_prekey), 
 				my_ntru_ratchet: Some(my_ntru_prekey),
 				their_ratchet: None, 
-				their_ratchet_ntru: their_ratchet_ntru, 
+				their_ratchet_ntru, 
 				unacked_key_exchange: None,
 				alice_base_ephemeral_key: Some(their_ephemeral), 
-				root_key: master_key.root_key().clone(),
+				root_key: *master_key.root_key(),
 				send_chain_key: None, // REVIEW: master_key.chain_key? –rather not, for it's not used until encrypt
 				receive_chain: ReceiveChain::new() 
 			}
@@ -191,12 +191,12 @@ impl Session {
 				self.my_ntru_ratchet = Some(KeyPairNtru::generate()); // TODO: don't generate, but inject instead
 			}
 
-			self.ratchet_counter = self.ratchet_counter + 1;
+			self.ratchet_counter += 1;
 			self.my_ratchet = Some(KeyPairX448::generate()); // TODO: don't generate, but inject instead
 
 			// REVIEW: do I need MasterKey at all?
 			// TODO: don't hard unwrap
-			let (ck, rk) = MasterKey::derive(&self.root_key, &self.my_ratchet.as_ref().unwrap(), &self.their_ratchet.as_ref().unwrap()).into(); 
+			let (ck, rk) = MasterKey::derive(&self.root_key, self.my_ratchet.as_ref().unwrap(), self.their_ratchet.as_ref().unwrap()).into(); 
 
 			self.send_chain_key = Some(ck);
 			self.root_key = rk;
@@ -222,14 +222,14 @@ impl Session {
 		let mk = self.send_chain_key.as_ref().unwrap().message_key(); 
 		let mac = mk.encrypt(plaintext, &mut msg);
 
-		self.counter = self.counter + 1;
+		self.counter += 1;
 		// TODO: don't hard unwrap
 		self.send_chain_key = Some(self.send_chain_key.as_ref().unwrap().next());
 
 		mac
 	}
 
-	fn decrypt_ntru_encrypted_ratchet<'a>(&'a self, eph: &NtruEncryptedKey) -> Result<NtruedKeys, Error> {
+	fn decrypt_ntru_encrypted_ratchet(&self, eph: &NtruEncryptedKey) -> Result<NtruedKeys, Error> {
 		use ntru::DecryptionMode::{Once, Double};
 
 		let find_key = |id| -> Result<&PrivateKeyNtru, ntru::Error> {
@@ -270,7 +270,7 @@ impl Session {
 					if chain.ratchet_key().id() != current {
 						return Err(Error::NewCounterForOldChain);
 					} else {
-						let mut next = chain.stage(counter)?;
+						let next = chain.stage(counter)?;
 						let mk = next.message_key();
 						let decrypted = mk.decrypt(mac)?;
 
@@ -320,7 +320,7 @@ impl Session {
 			new_chain.set_ntru_ratchet_key(current.ntru_ratchet_key().as_ref().unwrap().clone()); // TODO: don't hard unwrap
 		}
 
-		let mut next = new_chain.stage(msg.counter()).unwrap(); // TODO: don't hard unwrap
+		let next = new_chain.stage(msg.counter()).unwrap(); // TODO: don't hard unwrap
 
 		let decrypted = next.message_key().decrypt(mac)?;
 		next.commit();

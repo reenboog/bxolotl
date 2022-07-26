@@ -38,20 +38,18 @@ impl<'a> Next<'a> {
 		}
 
 		self.chain_key = Rc::new(self.chain_key.next());
-		self.counter = self.counter + 1;
+		self.counter += 1;
 	}
 
 	// Moves chain_key, keys_to_skip to parent, applies counter as next_counter and invalidates this Next
 	// stage() -> [advance()] -> commit()
-	pub fn commit(&mut self) {
+	pub fn commit(mut self) {
 		self.parent.set_next_counter(self.counter);
 		self.parent.set_chain_key(Rc::clone(&self.chain_key));
 
-		mem::replace(&mut self.keys_to_skip, HashMap::new()).into_iter().for_each(|(ctr, key)| {
+		mem::take(&mut self.keys_to_skip).into_iter().for_each(|(ctr, key)| {
 			self.parent.insert_skipped_key(ctr, key);
 		});
-
-		drop(self);
 	}
 }
 
@@ -109,7 +107,7 @@ impl Chain {
 	}
 
 	pub fn has_skipped_keys(&self) -> bool {
-		self.skipped_keys.len() > 0
+		!self.skipped_keys.is_empty()
 	}
 
 	pub fn next_counter(&self) -> u32 {
@@ -145,7 +143,7 @@ impl Chain {
 			staged.advance(purported_counter);
 		}
 
-		return Ok(staged);
+		Ok(staged)
 	}
 }
 

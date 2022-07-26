@@ -13,9 +13,19 @@ impl ReceiveChain {
 	}
 }
 
+impl Default for ReceiveChain {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl ReceiveChain {
 	pub fn len(&self) -> usize {
 		self.chains.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.chains.is_empty()
 	}
 
 	pub fn current(&self) -> Option<&Chain> {
