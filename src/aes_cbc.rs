@@ -113,7 +113,7 @@ impl Deserializable for AesCbc {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Ok(Self::try_from(proto::AesParams::decode(buf).or(Err(Error::BadAesParamsFormat))?)?)
+		Self::try_from(proto::AesParams::decode(buf).or(Err(Error::BadAesParamsFormat))?)
   }
 }
 

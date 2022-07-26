@@ -1,10 +1,20 @@
 use crate::hkdf::Hkdf;
 use crate::message_key::MessageKey;
-use crate::{hmac};
+use crate::serializable::{Serializable, Deserializable};
+use crate::{hmac, proto};
+use prost::Message;
 
 pub struct ChainKey {
 	key: hmac::Key,
 	counter: u32
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+	NoKey,
+	WrongKeyLen,
+	NoCounter,
+	BadFormat
 }
 
 const SEED: &[u8] = b"SecureMessenger";
@@ -36,10 +46,44 @@ impl ChainKey {
 	}
 }
 
+impl From<&ChainKey> for proto::session_state::ChainKey {
+	fn from(ck: &ChainKey) -> Self {
+		Self {
+			counter: Some(ck.counter),
+			key: Some(ck.key.as_bytes().to_vec())
+		}
+	}
+}
+
+impl Serializable for ChainKey {
+	fn serialize(&self) -> Vec<u8> {
+		proto::session_state::ChainKey::from(self).encode_to_vec()
+	}
+}
+
+impl TryFrom<proto::session_state::ChainKey> for ChainKey {
+	type Error = Error;
+
+	fn try_from(ck: proto::session_state::ChainKey) -> Result<Self, Self::Error> {
+		Ok(Self {
+			key: hmac::Key::try_from(ck.key.ok_or(Error::NoKey)?).or(Err(Error::WrongKeyLen))?,
+			counter: ck.counter.ok_or(Error::NoCounter)?
+		})
+	}
+}
+
+impl Deserializable for ChainKey {
+	type Error = Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+		Self::try_from(proto::session_state::ChainKey::decode(buf).or(Err(Error::BadFormat))?)
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::ChainKey;
-	use crate::hmac::Key;
+	use super::{ChainKey, Error};
+	use crate::{hmac::Key, serializable::{Serializable, Deserializable}};
 
 	#[test]
 	fn test_message_key() {
@@ -73,5 +117,59 @@ mod tests {
 
 		assert_eq!(next0.counter, next1.counter);
 		assert_ne!(next0.key.as_bytes(), next1.key.as_bytes());
+	}
+
+	#[test]
+	fn test_serialize_deserialize() {
+		let ck = ChainKey::new(Key::new([19u8; Key::SIZE]), 1984);
+		let deserialized = ChainKey::deserialize(&ck.serialize()).unwrap();
+
+		assert_eq!(deserialized.counter, ck.counter);
+		assert_eq!(deserialized.key.as_bytes(), ck.key.as_bytes());
+	}
+
+	#[test]
+	fn test_try_from() {
+		use crate::proto::session_state::ChainKey as ProtoCK;
+
+		assert_eq!(ChainKey::try_from(
+			ProtoCK { counter: None, key: Some(Key::new([22u8; Key::SIZE]).as_bytes().to_vec()) }
+		).err(), Some(Error::NoCounter));
+
+		assert_eq!(ChainKey::try_from(
+			ProtoCK { counter: Some(42), key: Some([22u8; 10].to_vec()) }
+		).err(), Some(Error::WrongKeyLen));
+
+		assert_eq!(ChainKey::try_from(
+			ProtoCK { counter: Some(17), key: None }
+		).err(), Some(Error::NoKey));
+
+		let valid = ProtoCK {
+			counter: Some(63),
+			key: Some([22u8; Key::SIZE].to_vec())
+		};
+
+		assert_eq!(valid.counter, Some(63));
+		assert_eq!(valid.key, Some([22u8; Key::SIZE].to_vec()));
+	}
+
+	#[test]
+	fn test_deserialize_errors() {
+		use crate::proto::session_state::ChainKey as ProtoCK;
+		use prost::Message;
+
+		assert_eq!(ChainKey::deserialize(
+			&ProtoCK { counter: None, key: Some(Key::new([22u8; Key::SIZE]).as_bytes().to_vec()) }.encode_to_vec()
+		).err(), Some(Error::NoCounter));
+
+		assert_eq!(ChainKey::deserialize(
+			&ProtoCK { counter: Some(42), key: Some([22u8; 10].to_vec()) }.encode_to_vec()
+		).err(), Some(Error::WrongKeyLen));
+
+		assert_eq!(ChainKey::deserialize(
+			&ProtoCK { counter: Some(17), key: None }.encode_to_vec()
+		).err(), Some(Error::NoKey));
+
+		assert_eq!(ChainKey::deserialize(b"abra cadabra").err(), Some(Error::BadFormat));
 	}
 }

@@ -47,6 +47,16 @@ impl From<&[u8; Digest::SIZE]> for Digest {
 	}
 }
 
+impl TryFrom<Vec<u8>> for Key {
+	type Error = std::array::TryFromSliceError;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		let slice: [u8; Self::SIZE] = value.as_slice().try_into()?;
+
+		Ok(Self::new(slice))
+	}
+}
+
 pub fn digest(key: &Key, msg: &[u8]) -> Digest {
 	let mut mac = HmacSha256::new_from_slice(&key.0).unwrap();
 

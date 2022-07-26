@@ -127,7 +127,7 @@ impl Deserializable for Message {
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
 		use prost::Message;
 
-		Ok(Self::try_from(proto::CryptoMessage::decode(buf).or(Err(Error::BadFormat))?)?)
+		Self::try_from(proto::CryptoMessage::decode(buf).or(Err(Error::BadFormat))?)
 	}
 }
 
