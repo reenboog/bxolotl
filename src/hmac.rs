@@ -47,6 +47,16 @@ impl From<&[u8; Digest::SIZE]> for Digest {
 	}
 }
 
+impl TryFrom<Vec<u8>> for Digest {
+	type Error = std::array::TryFromSliceError;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		let slice: [u8; Self::SIZE] = value.as_slice().try_into()?;
+
+		Ok(Self(slice))
+	}
+}
+
 impl TryFrom<Vec<u8>> for Key {
 	type Error = std::array::TryFromSliceError;
 

@@ -5,6 +5,7 @@ pub mod hmac;
 pub mod hkdf;
 pub mod key;
 pub mod session;
+pub mod session_list;
 pub mod message;
 pub mod root_key;
 pub mod chain_key;
@@ -23,6 +24,8 @@ pub mod master_key;
 pub mod message_key;
 pub mod proto;
 pub mod id;
+pub mod mac;
+pub mod decryptor;
 
 #[cfg(test)]
 mod tests {

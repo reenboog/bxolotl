@@ -1,4 +1,4 @@
-use crate::{session::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable};
+use crate::{mac::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable};
 
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
