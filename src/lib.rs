@@ -5,7 +5,6 @@ pub mod hmac;
 pub mod hkdf;
 pub mod key;
 pub mod session;
-pub mod session_list;
 pub mod message;
 pub mod root_key;
 pub mod chain_key;

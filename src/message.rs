@@ -204,7 +204,8 @@ mod tests {
 			ntru_identity: ntru.public_key().clone(),
 			ed448_identity: ed_identity.public_key().clone(),
 			signed_prekey_id: 123,
-			x448_prekey_id: 456 
+			x448_prekey_id: 456,
+			force_reset: true 
 		};
 
 		msg.set_counter(3);
@@ -222,7 +223,8 @@ mod tests {
 		assert_eq!(deserialized.ciphertext(), ct);
 		assert!(deserialized.ntru_encrypted_ratchet_key().is_none());
 		assert_eq!(deserialized.ratchet_key().unwrap().as_bytes(), eph_kp.public_key().as_bytes());
-		assert_eq!(deserialized.key_exchange.unwrap().x448_prekey_id, kex.x448_prekey_id);
+		assert_eq!(deserialized.key_exchange.as_ref().unwrap().x448_prekey_id, kex.x448_prekey_id);
+		assert_eq!(deserialized.key_exchange.unwrap().force_reset, true);
 	}
 
 	#[test]

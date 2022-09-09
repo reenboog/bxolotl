@@ -43,7 +43,7 @@ impl Serializable for AxolotlMac {
 #[derive(Debug, PartialEq)]
 pub enum Error {
 	NoBody,
-	BadBodyFormat,
+	BadBodyFormat, // TODO: test
 	NoDigest,
 	WrongDigestLen,
 	BadFormat

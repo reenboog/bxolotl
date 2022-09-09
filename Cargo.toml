@@ -32,6 +32,11 @@ cipher = { version = "0.4.2", features = ["block-padding", "alloc"] }
 aes = { version = "0.8.1" }
 cbc = { version = "0.1.2" }
 
+# async environment
+# TODO: move to ccl-rust
+tokio = { version = "1", features = ["full"] }
+async-trait = { version = "0.1" }
+
 [dev-dependencies]
 hex = { version = "0.4.3" }
 

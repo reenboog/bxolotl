@@ -21,7 +21,8 @@ pub struct KeyExchange {
 	pub ntru_identity: PublicKeyNtru,
 	pub ed448_identity: PublicKeyEd448,
 	pub signed_prekey_id: u64,
-	pub x448_prekey_id: u64
+	pub x448_prekey_id: u64,
+	pub force_reset: bool
 }
 
 impl From<&KeyExchange> for proto::KeyExchange {
@@ -32,7 +33,8 @@ impl From<&KeyExchange> for proto::KeyExchange {
 			identity_key_ntru: Some(kex.ntru_identity.as_bytes().to_vec()),
 			identity_signing_key_448: Some(kex.ed448_identity.as_bytes().to_vec()),
 			signed_pre_key_id: Some(kex.signed_prekey_id),
-			pre_448_key_id: Some(kex.x448_prekey_id)
+			pre_448_key_id: Some(kex.x448_prekey_id),
+			force_reset: Some(kex.force_reset)
 		}
 	}
 }
@@ -47,7 +49,8 @@ impl TryFrom<proto::KeyExchange> for KeyExchange {
 			ntru_identity: PublicKeyNtru::try_from(kex.identity_key_ntru.ok_or(Error::NoNtruIdentity)?).or(Err(Error::WrongNtruIdentityLen))?,
 			ed448_identity: PublicKeyEd448::try_from(kex.identity_signing_key_448.ok_or(Error::NoEd448Identity)?).or(Err(Error::WrongEd448IdentityLen))?,
 			signed_prekey_id: kex.signed_pre_key_id.ok_or(Error::NoSignedPrekeyId)?,
-			x448_prekey_id: kex.pre_448_key_id.ok_or(Error::NoX448PrekeyId)? 
+			x448_prekey_id: kex.pre_448_key_id.ok_or(Error::NoX448PrekeyId)?,
+			force_reset: kex.force_reset.unwrap_or(false)
 		})
 	}
 }
