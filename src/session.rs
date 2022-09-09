@@ -1,8 +1,8 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, mac::AxolotlMac};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, mac::AxolotlMac, serializable::{Serializable, Deserializable}};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
-enum Role {
+pub enum Role {
 	Alice, Bob
 }
 
@@ -88,6 +88,27 @@ pub struct Session {
 	receive_chain: ReceiveChain
 }
 
+impl Serializable for Session {
+	fn serialize(&self) -> Vec<u8> {
+		// TODO: implement
+		todo!()
+	}
+}
+
+impl Deserializable for Session {
+	type Error = Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+		// TODO: implement
+		todo!()
+	}
+}
+
+impl Session {
+	pub fn alice_base_ephemeral_key(&self) -> Option<&PublicKeyX448> {
+		self.alice_base_ephemeral_key.as_ref()
+	}
+}
 
 impl Session {
 	pub fn alice(my_identity: KeyPairX448, 
@@ -99,7 +120,8 @@ impl Session {
 		their_signed_prekey: SignedPublicKeyX448,
 		their_prekey: PublicKeyX448,
 		their_ntru_prekey: PublicKeyNtru,
-		their_ntru_identity: PublicKeyNtru) -> Self {
+		their_ntru_identity: PublicKeyNtru,
+		force_reset: bool) -> Self {
 			
 			let id = Self::derive_id(my_identity.public_key(), my_ephemeral.public_key(), &their_identity, &their_prekey);
 			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
@@ -109,7 +131,8 @@ impl Session {
 				ntru_identity: my_ntru_identity.public_key().clone(),
 				ed448_identity: my_signing_identity.public_key().clone(),
 				signed_prekey_id: their_signed_prekey.key().id(),
-				x448_prekey_id: their_prekey.id()
+				x448_prekey_id: their_prekey.id(),
+				force_reset
 			};
 
 			Self { id,
@@ -165,6 +188,11 @@ impl Session {
 }
 
 impl Session {
+	// TODO: rename to force_pq
+	pub fn force_ntru_for_next(&mut self) {
+		self.ratchet_counter = RATCHETS_BETWEEN_NTRU;
+	}
+
 	// TODO: return result
 	pub fn encrypt(&mut self, plaintext: &[u8], message_type: Type) -> AxolotlMac {
 		if self.my_ratchet.is_none() {
@@ -418,7 +446,8 @@ mod tests {
 			bob_signed_prekey().public().clone(),
 			bob_x448_prekey().public_key().clone(),
 			bob_ntru_prekey().public_key().clone(),
-			bob_ntru_identity().public_key().clone())
+			bob_ntru_identity().public_key().clone(),
+			false)
 	}
 
 	fn bob_session(kex: &KeyExchange) -> Session {
@@ -538,6 +567,64 @@ mod tests {
 		assert_eq!(rcvd3, b"hi 3");
 		assert_eq!(rcvd4, b"hi 4");
 		assert_eq!(rcvd5, b"hi 5");
+	}
+
+	#[test]
+	fn test_force_ntru() {
+		let mut alice = alice_session();
+		let a0 = alice.encrypt(b"hi 0", Type::Chat);
+		let a1 = alice.encrypt(b"hi 1", Type::Chat);
+		let a2 = alice.encrypt(b"hi 2", Type::Chat);
+
+		// all unacked messages are to have an ntru encrypted eph (and no ratchet_key yet)
+		assert!(a0.body().ratchet_key.is_none());
+		assert!(a1.body().ratchet_key.is_none());
+		assert!(a2.body().ratchet_key.is_none());
+		assert!(a0.body().ntru_encrypted_ratchet_key.is_some());
+		assert!(a1.body().ntru_encrypted_ratchet_key.is_some());
+		assert!(a2.body().ntru_encrypted_ratchet_key.is_some());
+
+		// now, bob decrypts the messages
+		let mut bob = bob_session(&a1.body().clone().key_exchange.unwrap());
+		_ = bob.decrypt(&a0).unwrap();
+		_ = bob.decrypt(&a1).unwrap();
+		_ = bob.decrypt(&a2).unwrap();
+
+		// make bob send a message to alice to ratchet once
+		_ = alice.decrypt(&bob.encrypt(b"hi from bob", Type::Chat)).unwrap();
+
+		// now, alice sends a few more messages with a new ratchet
+		let a3 = alice.encrypt(b"hi 3", Type::Chat);
+		let a4 = alice.encrypt(b"hi 4", Type::Chat);
+		let a5 = alice.encrypt(b"hi 5", Type::Chat);
+
+		// as well as no ntru_encrypted_ratchet_key is applied while ratchet_key is set
+		assert!(a3.body().ratchet_key.is_some());
+		assert!(a4.body().ratchet_key.is_some());
+		assert!(a5.body().ratchet_key.is_some());
+		assert!(a3.body().ntru_encrypted_ratchet_key.is_none());
+		assert!(a4.body().ntru_encrypted_ratchet_key.is_none());
+		assert!(a5.body().ntru_encrypted_ratchet_key.is_none());
+		
+		// now, bob decrypts 
+		_ = bob.decrypt(&a3).unwrap();
+		_ = bob.decrypt(&a4).unwrap();
+		_ = bob.decrypt(&a5).unwrap();
+
+		_ = alice.decrypt(&bob.encrypt(b"meaning of life, please?", Type::Chat)).unwrap();
+
+		// now, make alice ntru-encrypt her next message's ratchet
+		alice.force_ntru_for_next();
+
+		let a6 = alice.encrypt(b"42", Type::Chat);
+		let a7 = alice.encrypt(b"or not", Type::Chat);
+
+		// and notice the messages are encrypted with an ntru encrypted ratchet
+		assert!(a6.body().ratchet_key.is_none());
+		assert!(a7.body().ratchet_key.is_none());
+		assert!(a6.body().ntru_encrypted_ratchet_key.is_some());
+		assert!(a7.body().ntru_encrypted_ratchet_key.is_some());
+
 	}
 
 	#[test]
