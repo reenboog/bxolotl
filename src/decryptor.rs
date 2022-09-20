@@ -13,10 +13,11 @@ Session: { id, nid, blob, receive_only, restoring }
 // TODO: should this be async actually?
 #[async_trait]
 pub trait Sessions {
+	/// Should ignore receive_only sessions
 	// TODO: replace with `Nid`; should exclude receive_only session
 	async fn get_active(&self, nid: &str) -> Option<Session>;
-	// TODO: get_by_id() should be introduced instead where id = derive_id(eph.id, sender_identity)
-	async fn get_for_kex(&self, key_id: u64) -> Option<Session>;
+	/// Returns any session, whether active or receive_only
+	async fn get_by_id(&self, id: u64) -> Option<Session>;
 
 	// TODO: save_in_place(session, nid)?
 	async fn clear_all(&self, nid: &str); // TODO: result?
@@ -87,7 +88,7 @@ impl Decryptor {
 
 		// a new session is being initiated (doesn't mean it's the first message though)
 		if let Some(ref kex) = mac.body().key_exchange {
-			if let Some(current) = self.sessions.get_for_kex(kex.ntru_encrypted_ephemeral.key_id).await {
+			if let Some(current) = self.sessions.get_by_id(kex.id()).await {
 				return self.decrypt_with_session(current, mac).await;
 			} else {
 				let identity = self.identities.get_my_identity().await.ok_or(Error::NoIdentityFound)?;
