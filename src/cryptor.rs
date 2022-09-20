@@ -6,11 +6,16 @@ use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializa
 
 /*
 
-Session: { id, nid, blob, receive_only, restoring }
+Active: { nid(primary), session_id }
+ReadOnly: { nid(primary), session_id }
+
+Session: { id(primary), nid, blob, receive_only, restoring }
 
 */
 
 // TODO: should this be async actually?
+// db.get(id) -> Vec<u8>
+// Session::deserialize()
 #[async_trait]
 pub trait Sessions {
 	/// Should ignore receive_only sessions
@@ -19,9 +24,9 @@ pub trait Sessions {
 	/// Returns any session, whether active or receive_only
 	async fn get_by_id(&self, id: u64) -> Option<Session>;
 
-	// TODO: save_in_place(session, nid)?
+	/// Clears active and receive_only sessions, if any
 	async fn clear_all(&self, nid: &str); // TODO: result?
-	async fn save(&self, session: &Session); // TODO: introduce result
+	async fn save(&self, session: &Session, nid: &str, id: u64, receive_only: bool); // TODO: introduce result
 }
 
 // TODO: should this be async actually?
@@ -40,13 +45,13 @@ pub trait Prekeys {
 	async fn delete(&self, id: u64);
 }
 
-pub struct Decryptor {
+pub struct Cryptor {
 	sessions: Arc<dyn Sessions>,
 	prekeys: Arc<dyn Prekeys>,
 	identities: Arc<dyn Identities>
 }
 
-impl Decryptor {
+impl Cryptor {
 	pub fn new(sessions: Arc<dyn Sessions>, prekeys: Arc<dyn Prekeys>, identities: Arc<dyn Identities>) -> Self {
 		Self {
 			sessions: Arc::clone(&sessions),
@@ -81,23 +86,21 @@ pub struct Decrypted {
 	_type: Type
 }
 
-impl Decryptor {
+impl Cryptor {
 	pub async fn decrypt(&mut self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
 		// all the state change should be saved here, not by the caller – should it?
 		let mac = AxolotlMac::deserialize(mac).or(Err(Error::BadMacFormat))?;
 
 		// a new session is being initiated (doesn't mean it's the first message though)
 		if let Some(ref kex) = mac.body().key_exchange {
-			if let Some(current) = self.sessions.get_by_id(kex.id()).await {
-				return self.decrypt_with_session(current, mac).await;
+			// this can be both, active and readonly session – does not matter at this point
+			if let Some(session) = self.sessions.get_by_id(kex.id()).await {
+				return self.decrypt_with_session(session, mac, nid).await;
 			} else {
 				let identity = self.identities.get_my_identity().await.ok_or(Error::NoIdentityFound)?;
 				let ntru_identity = self.identities.get_my_ntru_identity().await.ok_or(Error::NoNtruIdentityFound)?;
 
-				// TODO: reset if failed (handle by an outer layer?)
 				let signed_prekey = self.prekeys.get_signed(kex.signed_prekey_id).await.ok_or(Error::NoSignedPrekeyFound(kex.signed_prekey_id))?;
-				// TODO: reset if failed (handle by an outer layer?)
-				// TODO: consume later (before saving the session)
 				let Prekey { key_x448, key_ntru, .. } = self.prekeys.get(kex.x448_prekey_id).await.ok_or(Error::NoPrekeyFound(kex.x448_prekey_id))?;
 				let find_key = |_| -> Result<&PrivateKeyNtru, ntru::Error> {
 					Ok(key_ntru.private_key())
@@ -106,46 +109,51 @@ impl Decryptor {
 					&kex.ntru_encrypted_ephemeral,
 					Double { second_key: ntru_identity.private_key(), first_key: Box::new(find_key) }).or(Err(Error::BadNtruEncryptedEphemeral))?;
 				let their_identity = kex.x448_identity.clone(); 
-
+				// FIXME: should I save this new identity by DB?
 				// TODO: make sure nid corresponds to the supplied identity by:
 				// GET users/cid.{identity, identity_ntru, signing_identity} == kex.{identity, identity_ntru, signing_identity}
 				// ^ if no match, ignore the message?
 				// ^ if http error, try later?
-				let session = Session::bob(identity, ntru_identity, signed_prekey, key_x448, key_ntru, their_identity, their_key_x448, their_key_ntru);
+				let mut session = Session::bob(identity, ntru_identity, signed_prekey, key_x448, key_ntru, their_identity, their_key_x448, their_key_ntru);
 
 				// TODO: check current.has_receive only first? –if yes, clear as well
 				if kex.force_reset {
 					self.sessions.clear_all(nid).await;
 
-					return self.decrypt_with_session(session, mac).await;
+					return self.decrypt_with_session(session, mac, nid).await;
 				} else {
+					// do I have any other session for this nid?
 					if let Some(_) = self.sessions.get_active(nid).await {
 						if session.role() == session::Role::Alice {
 							if Self::should_be_alice(my_nid, nid) {
-								// the other side thought they should be Alice (they'll fix themselves), so keep this session for some time in receive_only mode
-								// FIXME: save as READ_ONLY
-								// session.set_read_only();
-								return self.decrypt_with_session(session, mac).await;
+								// the sender is considering herself Alice (but they'll fix themselves eventually), so keep 
+								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
+								session.set_read_only();
+
+								return self.decrypt_with_session(session, mac, nid).await;
 							} else {
 								// I was Alice, but at the same time some one initiated a session and I actually should be Bob
 								// now, I'll delete my session and will use the new one
 								self.sessions.clear_all(nid).await;
 
-								return self.decrypt_with_session(session, mac).await;
+								return self.decrypt_with_session(session, mac, nid).await;
 							}
 						} else {
+							// I'm bob already, but from now on, I should be using this new session only
 							self.sessions.clear_all(nid).await;
 
-							return self.decrypt_with_session(session, mac).await;
+							return self.decrypt_with_session(session, mac, nid).await;
 						}
 					} else {
-						return self.decrypt_with_session(session, mac).await;
+						// this is a new and the only session, so proceed normally: decrypt, save, etc
+						return self.decrypt_with_session(session, mac, nid).await;
 					}
 				}
 			}
 		} else {
 			if let Some(current) = self.sessions.get_active(nid).await {
-				return self.decrypt_with_session(current, mac).await;
+				// at this point, it could be save to delete any readonly sessions, if any
+				return self.decrypt_with_session(current, mac, nid).await;
 			} else {
 				return Err(Error::NoSessionFound)
 			}
@@ -157,32 +165,53 @@ impl Decryptor {
 		my_nid < nid
 	}
 
-	async fn decrypt_with_session(&self, mut session: Session, mac: AxolotlMac) -> Result<Decrypted, Error> {
-		let _type = mac.body()._type;
-		// if error reset?
-		let msg = session.decrypt(&mac).or(Err(Error::WrongMac))?;
-		// TODO: respect receive_only
-		self.sessions.save(&session).await;
+	async fn decrypt_with_session(&self, mut session: Session, mac: AxolotlMac, nid: &str) -> Result<Decrypted, Error> {
+		if let Ok(msg) = session.decrypt(&mac) {
+			// TODO: respect receive_only
+			self.sessions.save(&session, nid, session.id(), session.receive_only()).await;
 
-		if let Some(id) = mac.body().key_exchange.as_ref().and_then(|k| Some(k.x448_prekey_id)) {
-			self.prekeys.delete(id).await;
+			// TODO: session itself could keep Option<prekey_id> and clear it per each decryption, if required
+			if let Some(id) = mac.body().key_exchange.as_ref().and_then(|k| Some(k.x448_prekey_id)) {
+				self.prekeys.delete(id).await;
+			}
+
+			Ok(Decrypted { msg, _type: mac.body()._type })
+		} else {
+			self.sessions.clear_all(nid).await;
+
+			Err(Error::WrongMac)
 		}
+	}
 
-		Ok(Decrypted { msg, _type })
+	pub async fn encrypt(&self, plaintext: &[u8], nid: &str) -> Vec<u8> {
+		if let Some(current) = self.sessions.get_active(nid).await {
+
+		} else {
+		}
+		// get session
+		// create a new one, if not found
+		// encrypt
+		// save
+		// return
+		todo!()
+	}
+
+	async fn encrypt_with_session(&self, session: Session, plaintext: &[u8], nid: &str) -> Vec<u8> {
+		todo!()
 	}
 }
 
 
 #[cfg(test)]
 mod tests {
-	use super::Decryptor;
+	use super::Cryptor;
 
 	// TODO: move to Nid instead
 	#[test]
 	fn test_role_by_nid() {
-		assert!(Decryptor::should_be_alice("abcdef:1", "ghijkl:1"));
-		assert!(Decryptor::should_be_alice("abcdef:1", "abcdef:2"));
-		assert!(Decryptor::should_be_alice("1bcdef:1", "2bcdef:2"));
+		assert!(Cryptor::should_be_alice("abcdef:1", "ghijkl:1"));
+		assert!(Cryptor::should_be_alice("abcdef:1", "abcdef:2"));
+		assert!(Cryptor::should_be_alice("1bcdef:1", "2bcdef:2"));
 	}
 
 	#[test]

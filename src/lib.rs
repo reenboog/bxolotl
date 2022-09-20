@@ -24,7 +24,7 @@ pub mod message_key;
 pub mod proto;
 pub mod id;
 pub mod mac;
-pub mod decryptor;
+pub mod cryptor;
 
 #[cfg(test)]
 mod tests {

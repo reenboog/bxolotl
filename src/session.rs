@@ -63,6 +63,7 @@ impl From<chain::Error> for Error {
 pub struct Session {
 	id: u64,
 	role: Role,
+	read_only: bool,
 
 	counter: u32,
 	prev_counter: u32, // prev sending chain len?
@@ -104,6 +105,14 @@ impl Deserializable for Session {
 }
 
 impl Session {
+	pub fn id(&self) -> u64 {
+		self.id
+	}
+
+	pub fn receive_only(&self) -> bool {
+		self.read_only
+	}
+
 	pub fn role(&self) -> Role {
 		self.role
 	}
@@ -134,8 +143,10 @@ impl Session {
 				force_reset
 			};
 
-			Self { id,
+			Self {
+				id,
 				role: Role::Alice,
+				read_only: false,
 				counter: 0,
 				prev_counter: 0,
 				ratchet_counter: 0,
@@ -162,8 +173,10 @@ impl Session {
 			let id = KeyExchange::derive_id(&their_identity, my_prekey.public_key().id());
 			let master_key = MasterKey::bob(&my_identity, &my_signed_prekey, &my_prekey, &their_identity, &their_ephemeral);
 
-			Self { id,
+			Self {
+				id,
 				role: Role::Bob, 
+				read_only: false,
 				counter: 0, 
 				prev_counter: 0, 
 				ratchet_counter: 0,
@@ -181,7 +194,10 @@ impl Session {
 }
 
 impl Session {
-	// TODO: rename to force_pq
+	pub fn set_read_only(&mut self) {
+		self.read_only = true
+	}
+
 	pub fn force_ntru_for_next(&mut self) {
 		self.ratchet_counter = RATCHETS_BETWEEN_NTRU;
 	}
