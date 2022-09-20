@@ -2,6 +2,7 @@ use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain,
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Role {
 	Alice, Bob
 }
@@ -80,6 +81,7 @@ pub struct Session {
 
 	unacked_key_exchange: Option<KeyExchange>, // FIXME: move to Role?
 
+	// TODO: used for checking against kex only; use id instead (change its derive implementation)
 	alice_base_ephemeral_key: Option<PublicKeyX448>, // TODO: rather store base_key_id, for it's only used; move to Role
 
 	root_key: RootKey,
@@ -105,6 +107,10 @@ impl Deserializable for Session {
 }
 
 impl Session {
+	pub fn role(&self) -> Role {
+		self.role
+	}
+
 	pub fn alice_base_ephemeral_key(&self) -> Option<&PublicKeyX448> {
 		self.alice_base_ephemeral_key.as_ref()
 	}
