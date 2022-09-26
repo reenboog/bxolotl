@@ -6,7 +6,7 @@ use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializa
 /*
 
 Active: { nid(primary), session_id }
-ReadOnly: { nid(primary), session_id }
+ReceiveOnly: { nid(primary), session_id }
 
 Session: { id(primary), nid, blob, receive_only, restoring }
 
@@ -85,7 +85,7 @@ impl Cryptor {
 
 		// a new session is being initiated (doesn't mean it's the first message though)
 		if let Some(ref kex) = mac.body().key_exchange {
-			// this can be both, active and readonly session – does not matter at this point
+			// this can be both, active and receive_only session – does not matter at this point
 			if let Some(session) = self.sessions.get_by_id(kex.id()) {
 				return self.decrypt_with_session(session, mac, nid);
 			} else {
@@ -144,7 +144,7 @@ impl Cryptor {
 			}
 		} else {
 			if let Some(current) = self.sessions.get_active(nid) {
-				// at this point, it could be save to delete any readonly sessions, if any
+				// at this point, it could be save to delete any receive_only sessions, if any
 				return self.decrypt_with_session(current, mac, nid);
 			} else {
 				return Err(Error::NoSessionFound)
@@ -175,20 +175,34 @@ impl Cryptor {
 		}
 	}
 
-	pub async fn encrypt(&self, plaintext: &[u8], nid: &str) -> Vec<u8> {
-		if let Some(current) = self.sessions.get_active(nid) {
+	// TODO: force ntru?
+	// TODO: force reset?
+	// TODO: MessageType?
+	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, force_reset: bool) -> Vec<u8> {
+		// TODO: if force_reset, create a new session?
 
+		// this ignores receive_only sessions
+		if let Some(current) = self.sessions.get_active(nid) {
+			return self.encrypt_with_session(current, plaintext, _type, nid);
 		} else {
 		}
-		// get session
-		// create a new one, if not found
-		// encrypt
-		// save
+		// 1 get active_session
+		// 2 create a new one, if not found:
+		//  2.1 read recipient identity
+		//  2.2 fetch prekey – respect UserDoesNotExist as well as network errors
+		// 		{ { x448, ntru }, x448, ntru, signed_x448, ed448 }
+		//	2.2' read peer identity? { x448, ntru, ed48 }?
+		//  2.3 create Alice
+		// 	2.3' save peer identity?
+		//  2.4 save Alice?
+		// 3 encrypt: if failed, clear
+		// 4 save
+		// 5 encode
 		// return
 		todo!()
 	}
 
-	async fn encrypt_with_session(&self, session: Session, plaintext: &[u8], nid: &str) -> Vec<u8> {
+	fn encrypt_with_session(&self, session: Session, plaintext: &[u8],_type: Type, nid: &str) -> Vec<u8> {
 		todo!()
 	}
 }
