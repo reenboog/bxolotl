@@ -25,12 +25,12 @@ pub trait Storage {
 	fn save_session(&self, session: &Session, nid: &str, id: u64, receive_only: bool); // TODO: introduce result
 
 	// Identity
-	fn get_my_identity(&self) -> Option<KeyPairX448>; // TODO: Result with a custom error type?
-	fn get_my_signing_identity(&self) -> Option<KeyPairEd448>;
+	fn get_my_x448_identity(&self) -> Option<KeyPairX448>; // TODO: Result with a custom error type?
+	fn get_my_ed448_identity(&self) -> Option<KeyPairEd448>;
 	fn get_my_ntru_identity(&self) -> Option<KeyPairNtru>; // TODO: result with a custom error type?
 	
-	fn get_identity_for_nid(&self, nid: &str) -> Option<IdentityKeys>;
-	fn save_identity(&self, identity: &IdentityKeys, nid: &str);
+	fn get_identity_keys_for_nid(&self, nid: &str) -> Option<IdentityKeys>;
+	fn save_identity_keys_for_nid(&self, identity: &IdentityKeys, nid: &str);
 
 	// Prekeys
 	fn get_prekey(&self, id: u64) -> Option<Prekey>; // TODO: use Result instead; a separate consume?
@@ -118,7 +118,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 			if let Some(session) = self.storage.get_session_by_id(kex.id()) {
 				return self.decrypt_with_session(session, mac, nid);
 			} else {
-				let identity = self.storage.get_my_identity().ok_or(Error::NoIdentityFound)?;
+				let identity = self.storage.get_my_x448_identity().ok_or(Error::NoIdentityFound)?;
 				let ntru_identity = self.storage.get_my_ntru_identity().ok_or(Error::NoNtruIdentityFound)?;
 
 				let signed_prekey = self.storage.get_signed_prekey(kex.signed_prekey_id).ok_or(Error::NoSignedPrekeyFound(kex.signed_prekey_id))?;
@@ -208,19 +208,19 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 		if let Some(current) = self.storage.get_active_session_for_nid(nid) {
 			return self.encrypt_with_session(current, plaintext, _type, nid);
 		} else {
-			let my_identity = self.storage.get_my_identity().ok_or(Error::NoIdentityFound)?;
+			let my_identity = self.storage.get_my_x448_identity().ok_or(Error::NoIdentityFound)?;
 			let my_ntru_identity = self.storage.get_my_ntru_identity().ok_or(Error::NoNtruIdentityFound)?;
-			let my_signing_identity = self.storage.get_my_signing_identity().ok_or(Error::NoSigningIdentityFound)?;
+			let my_signing_identity = self.storage.get_my_ed448_identity().ok_or(Error::NoSigningIdentityFound)?;
 			let my_ratchet = KeyPairX448::generate();
 			let my_ntru_ratchet = KeyPairNtru::generate();
 			let bundle = self.apis.fetch_prekey(nid)?; // TODO: respect UserDoesNotExist + network errors
 
-			if let Some(identity) = self.storage.get_identity_for_nid(nid) {
+			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid) {
 				if identity.x448 != bundle.identity.x448 || identity.ntru != bundle.identity.ntru || identity.ed448 != bundle.identity.ed448 {
 					return Err(Error::IdentityDoesNotMatch);
 				}
 			} else {
-				self.storage.save_identity(&bundle.identity, nid);
+				self.storage.save_identity_keys_for_nid(&bundle.identity, nid);
 			}
 
 			let session = Session::alice(my_identity,
