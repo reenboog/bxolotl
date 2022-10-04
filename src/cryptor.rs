@@ -58,6 +58,7 @@ impl Cryptor {
 	}
 }
 
+#[derive(Debug)]
 pub enum Error {
 	/// Protobuf encoding error; ignore the message
 	BadMacFormat,	
