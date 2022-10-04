@@ -44,15 +44,17 @@ pub trait Apis {
 	fn fetch_prekey(&self, nid: &str) -> Result<FetchedPrekeyBundle, Error>;
 }
 
-pub struct Cryptor {
-	storage: Arc<dyn Storage>,
-	apis: Arc<dyn Apis>
+pub struct Cryptor<S, A>
+where
+	S: Storage + Send,
+	A: Apis + Send
+{
+	storage: Arc<S>,
+	apis: Arc<A>
 }
 
-unsafe impl Send for Cryptor {}
-
-impl Cryptor {
-	pub fn new(storage: Arc<dyn Storage>, apis: Arc<dyn Apis>) -> Self {
+impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
+	pub fn new(storage: Arc<S>, apis: Arc<A>) -> Self {
 		Self {
 			storage: Arc::clone(&storage),
 			apis: Arc::clone(&apis)
@@ -105,7 +107,7 @@ pub struct FetchedPrekeyBundle {
 	identity: IdentityKeys
 }
 
-impl Cryptor {
+impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 	pub async fn decrypt(&mut self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
 		// all the state change should be saved here, not by the caller – should it?
 		let mac = AxolotlMac::deserialize(mac).or(Err(Error::BadMacFormat))?;
@@ -144,7 +146,7 @@ impl Cryptor {
 					// do I have any other session for this nid?
 					if let Some(_) = self.storage.get_active_session_for_nid(nid) {
 						if session.role() == session::Role::Alice {
-							if Self::should_be_alice(my_nid, nid) {
+							if should_be_alice(my_nid, nid) {
 								// the sender is considering herself Alice (but they'll fix themselves eventually), so keep 
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
 								session.set_read_only();
@@ -177,11 +179,6 @@ impl Cryptor {
 				return Err(Error::NoSessionFound)
 			}
 		}
-	}
-
-	// TODO: rename
-	fn should_be_alice(my_nid: &str, nid: &str) -> bool {
-		my_nid < nid
 	}
 
 	fn decrypt_with_session(&self, mut session: Session, mac: AxolotlMac, nid: &str) -> Result<Decrypted, Error> {
@@ -256,16 +253,20 @@ impl Cryptor {
 	}
 }
 
+// TODO: rename & move somewhere else
+fn should_be_alice(my_nid: &str, nid: &str) -> bool {
+	my_nid < nid
+}
 #[cfg(test)]
 mod tests {
-	use super::Cryptor;
+	use crate::cryptor::should_be_alice;
 
 	// TODO: move to Nid instead
 	#[test]
 	fn test_role_by_nid() {
-		assert!(Cryptor::should_be_alice("abcdef:1", "ghijkl:1"));
-		assert!(Cryptor::should_be_alice("abcdef:1", "abcdef:2"));
-		assert!(Cryptor::should_be_alice("1bcdef:1", "2bcdef:2"));
+		assert!(should_be_alice("abcdef:1", "ghijkl:1"));
+		assert!(should_be_alice("abcdef:1", "abcdef:2"));
+		assert!(should_be_alice("1bcdef:1", "2bcdef:2"));
 	}
 
 	#[test]
