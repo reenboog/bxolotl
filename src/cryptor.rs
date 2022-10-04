@@ -49,6 +49,8 @@ pub struct Cryptor {
 	apis: Arc<dyn Apis>
 }
 
+unsafe impl Send for Cryptor {}
+
 impl Cryptor {
 	pub fn new(storage: Arc<dyn Storage>, apis: Arc<dyn Apis>) -> Self {
 		Self {
