@@ -240,6 +240,7 @@ where
 	}
 }
 
+#[derive(Debug, PartialEq)]
 pub struct KeyTypeNtru;
 
 impl KeyPairSize for KeyTypeNtru {

@@ -9,12 +9,6 @@ impl<T, const SIZE: usize> PublicKey<T, SIZE> {
 	}
 }
 
-impl<T, const SIZE: usize> PartialEq for PublicKey<T, SIZE> {
-	fn eq(&self, other: &Self) -> bool {
-		self.bytes == other.bytes && self._marker == other._marker
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::PublicKey;

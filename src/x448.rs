@@ -1,5 +1,6 @@
 use crate::{key_pair::{KeyPairSize, KeyPair}, private_key::{PrivateKey, SharedKey}, public_key::PublicKey};
 
+#[derive(Debug, PartialEq)]
 pub struct KeyTypeX448;
 
 impl KeyPairSize for KeyTypeX448 {

@@ -17,6 +17,7 @@ impl Signature {
 	}
 }
 
+#[derive(Debug, PartialEq)]
 pub struct KeyTypeEd448;
 
 impl KeyPairSize for KeyTypeEd448 {
