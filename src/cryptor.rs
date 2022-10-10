@@ -1,7 +1,7 @@
 use std::{sync::Arc};
 
 use prost::encoding::bool;
-use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, ntru::{KeyPairNtru, NtruedKeys, self, PrivateKeyNtru, DecryptionMode::Double, PublicKeyNtru}, signed_key_pair::SignedKeyPair, message::Type, ed448::{PublicKeyEd448, KeyPairEd448}, signed_public_key::SignedPublicKeyX448};
+use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, ntru::{KeyPairNtru, NtruedKeys, self, PrivateKeyNtru, DecryptionMode::Double, PublicKeyNtru}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
 
 /*
 
@@ -90,13 +90,6 @@ pub enum Error {
 pub struct Decrypted {
 	msg: Vec<u8>,
 	_type: Type
-}
-
-// TODO: rename
-pub struct IdentityKeys {
-	x448: PublicKeyX448,
-	ntru: PublicKeyNtru,
-	ed448: PublicKeyEd448
 }
 
 // TODO: rename

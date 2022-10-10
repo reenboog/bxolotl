@@ -25,6 +25,7 @@ pub mod proto;
 pub mod id;
 pub mod mac;
 pub mod cryptor;
+pub mod identity_keys;
 
 #[cfg(test)]
 mod tests {
