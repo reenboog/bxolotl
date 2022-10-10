@@ -1,6 +1,6 @@
 use prost::Message;
 
-use crate::{x448::PublicKeyX448, ntru::PublicKeyNtru, ed448::PublicKeyEd448, proto, serializable::Deserializable};
+use crate::{x448::PublicKeyX448, ntru::PublicKeyNtru, ed448::PublicKeyEd448, proto, serializable::{Deserializable, Serializable}};
 
 #[derive(Debug)]
 pub enum Error {
@@ -10,10 +10,27 @@ pub enum Error {
 	BadFormat
 }
 
+#[derive(Debug, PartialEq)]
 pub struct IdentityKeys {
 	pub x448: PublicKeyX448,
-	pub ntru: PublicKeyNtru,
-	pub ed448: PublicKeyEd448
+	pub ed448: PublicKeyEd448,
+	pub ntru: PublicKeyNtru
+}
+
+impl From<&IdentityKeys> for proto::IdentityKeys {
+	fn from(src: &IdentityKeys) -> Self {
+		Self {
+			x448: src.x448.as_bytes().to_vec(),
+			ed448: src.ed448.as_bytes().to_vec(),
+			ntru: src.ntru.as_bytes().to_vec()
+		}
+	}
+}
+
+impl Serializable for IdentityKeys {
+	fn serialize(&self) -> Vec<u8> {
+		proto::IdentityKeys::from(self).encode_to_vec()
+	}
 }
 
 impl TryFrom<proto::IdentityKeys> for IdentityKeys {
@@ -33,5 +50,24 @@ impl Deserializable for IdentityKeys {
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
 		Self::try_from(proto::IdentityKeys::decode(buf).or(Err(Error::BadFormat))?)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::{x448::KeyPairX448, ed448::KeyPairEd448, ntru::KeyPairNtru, serializable::{Serializable, Deserializable}};
+	use super::IdentityKeys;
+
+	#[test]
+	fn test_serialize_deserialize() {
+		let keys = IdentityKeys {
+			x448: KeyPairX448::generate().public_key().clone(),
+			ed448: KeyPairEd448::generate().public_key().clone(),
+			ntru: KeyPairNtru::generate().public_key().clone()
+		};
+		let serialized = keys.serialize();
+		let deserialized = IdentityKeys::deserialize(&serialized).unwrap();
+
+		assert_eq!(keys, deserialized);
 	}
 }
