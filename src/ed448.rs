@@ -1,5 +1,10 @@
 use crate::{key_pair::{KeyPairSize, KeyPair}, private_key::PrivateKey, public_key::PublicKey};
 
+#[derive(Debug)]
+pub enum Error {
+	WrongLen
+}
+
 #[derive(Clone)]
 pub struct Signature {
 	bytes: [u8; Self::SIZE]
@@ -14,6 +19,14 @@ impl Signature {
 
 	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
 		&self.bytes
+	}
+}
+
+impl TryFrom<Vec<u8>> for Signature {
+	type Error = Error;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		Ok(Self::new(value.try_into().or(Err(Error::WrongLen))?))
 	}
 }
 
