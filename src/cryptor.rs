@@ -1,5 +1,6 @@
 use std::{sync::Arc};
 
+use async_trait::async_trait;
 use prost::encoding::bool;
 use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, ntru::{KeyPairNtru, NtruedKeys, self, PrivateKeyNtru, DecryptionMode::Double, PublicKeyNtru}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
 
@@ -41,8 +42,9 @@ pub trait Storage {
 
 }
 
+#[async_trait]
 pub trait Apis {
-	fn fetch_prekey(&self, nid: &str, auth_nid: &str, auth_token: &str) -> Result<FetchedPrekeyBundle, Error>;
+	async fn fetch_prekey(&self, nid: &str, auth_nid: &str, auth_token: &str) -> Result<FetchedPrekeyBundle, Error>;
 }
 
 pub struct Cryptor<S, A>
@@ -207,7 +209,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 			let my_signing_identity = self.storage.get_my_ed448_identity().ok_or(Error::NoSigningIdentityFound)?;
 			let my_ratchet = KeyPairX448::generate();
 			let my_ntru_ratchet = KeyPairNtru::generate();
-			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token)?; // TODO: respect UserDoesNotExist + network errors
+			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token).await?; // TODO: respect UserDoesNotExist + network errors
 
 			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid) {
 				if identity.x448 != bundle.identity.x448 || identity.ntru != bundle.identity.ntru || identity.ed448 != bundle.identity.ed448 {
