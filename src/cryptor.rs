@@ -87,7 +87,11 @@ pub enum Error {
 	NoSessionFound,
 	/// Current session is corrupted; reset
 	// TODO: rename, make less generic
-	WrongMac
+	WrongMac,
+	/// No user exists or authentication failure; fail, no recovery
+	NoPrekeysForUser,
+	/// A generic network error; try again later
+	NoNetwork
 }
 
 pub struct Decrypted {
