@@ -4,7 +4,6 @@ use crate::serializable::{Serializable, Deserializable};
 use crate::{hmac, proto};
 use prost::Message;
 
-#[derive(Clone)]
 pub struct ChainKey {
 	key: hmac::Key,
 	counter: u32

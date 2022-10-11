@@ -88,6 +88,8 @@ pub struct Session {
 	receive_chain: ReceiveChain
 }
 
+unsafe impl Send for Session {}
+
 impl Serializable for Session {
 	fn serialize(&self) -> Vec<u8> {
 		// TODO: implement
