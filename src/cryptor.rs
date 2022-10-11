@@ -34,14 +34,15 @@ pub trait Storage {
 
 	// Prekeys
 	fn get_prekey(&self, id: u64) -> Option<Prekey>; // TODO: use Result instead; a separate consume?
-	fn get_signed_prekey(&self, id: u64) -> Option<SignedKeyPair>; // TODO: use Result instead and handle errors: locked vs not found
-
 	/// deletes a Prekey where id = prekey.x448_key.id, if any
 	fn delete_prekey(&self, id: u64);
+	
+	fn get_signed_prekey(&self, id: u64) -> Option<SignedKeyPair>; // TODO: use Result instead and handle errors: locked vs not found
+
 }
 
 pub trait Apis {
-	fn fetch_prekey(&self, nid: &str) -> Result<FetchedPrekeyBundle, Error>;
+	fn fetch_prekey(&self, nid: &str, auth_nid: &str, auth_token: &str) -> Result<FetchedPrekeyBundle, Error>;
 }
 
 pub struct Cryptor<S, A>
@@ -193,7 +194,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 
 	// force_ntru, as is now implemented, is not what it might look like: it can ntru-encrypt my next ratchet when the time
 	// to turn comes, but it can't turn it emmidiately because of Axolotl's strict ping-pong nature
-	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
+	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, my_nid: &str, auth_token: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
 		if force_reset {
 			self.storage.clear_all_sessions_for_nid(nid);
 		}
@@ -206,7 +207,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 			let my_signing_identity = self.storage.get_my_ed448_identity().ok_or(Error::NoSigningIdentityFound)?;
 			let my_ratchet = KeyPairX448::generate();
 			let my_ntru_ratchet = KeyPairNtru::generate();
-			let bundle = self.apis.fetch_prekey(nid)?; // TODO: respect UserDoesNotExist + network errors
+			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token)?; // TODO: respect UserDoesNotExist + network errors
 
 			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid) {
 				if identity.x448 != bundle.identity.x448 || identity.ntru != bundle.identity.ntru || identity.ed448 != bundle.identity.ed448 {
