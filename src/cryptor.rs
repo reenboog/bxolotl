@@ -56,9 +56,6 @@ where
 	apis: Arc<A>
 }
 
-unsafe impl<S: Storage + Send, A: Apis + Send> Sync for Cryptor<S, A> {}
-unsafe impl<S: Storage + Send, A: Apis + Send> Send for Cryptor<S, A> {}
-
 impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 	pub fn new(storage: Arc<S>, apis: Arc<A>) -> Self {
 		Self {
