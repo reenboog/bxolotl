@@ -90,8 +90,16 @@ pub enum Error {
 	WrongMac,
 	/// No user exists or authentication failure; fail, no recovery
 	NoPrekeysForUser,
+	/// A prekey was fetched, but it's of unknown format; fail and ignore
+	BadPrekeyFormat,
 	/// A generic network error; try again later
 	NoNetwork
+}
+
+impl From<std::array::TryFromSliceError> for Error {
+	fn from(_: std::array::TryFromSliceError) -> Self {
+		Self::BadPrekeyFormat
+	}
 }
 
 pub struct Decrypted {
