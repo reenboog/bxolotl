@@ -101,10 +101,10 @@ pub struct Decrypted {
 
 // TODO: rename
 pub struct FetchedPrekeyBundle {
-	prekey_x448: PublicKeyX448,
-	prekey_ntru: PublicKeyNtru,
-	signed_prekey_x448: SignedPublicKeyX448,
-	identity: IdentityKeys
+	pub prekey_x448: PublicKeyX448,
+	pub prekey_ntru: PublicKeyNtru,
+	pub signed_prekey_x448: SignedPublicKeyX448,
+	pub identity: IdentityKeys
 }
 
 impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {

@@ -5,7 +5,7 @@ pub enum Error {
 	WrongLen
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Signature {
 	bytes: [u8; Self::SIZE]
 }
