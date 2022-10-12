@@ -1,55 +1,55 @@
-trait SizedKeyPair {
-	fn priv_size() -> usize;
-	fn pub_size() -> usize;
+use crate::{private_key::PrivateKey, public_key::PublicKey};
+
+pub struct KeyPair<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> {
+	private: PrivateKey<T, PRIV_SIZE>,
+	public: PublicKey<T, PUB_SIZE>
 }
 
-pub struct KeyPair<const PRIV_KEY_SIZE: usize, const PUB_KEY_SIZE: usize> {
-	private: [u8; PRIV_KEY_SIZE], // TODO: replace with PrivateKey?
-	public: [u8; PUB_KEY_SIZE]		// TODO: replace with PublicKey?
-}
-
-impl<const PRIV_KEY_SIZE: usize, const PUB_KEY_SIZE: usize> SizedKeyPair for KeyPair<PRIV_KEY_SIZE, PUB_KEY_SIZE> {
-	fn priv_size() -> usize {
-		PRIV_KEY_SIZE
+impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> KeyPair<T, PRIV_SIZE, PUB_SIZE> {
+	pub fn new(private: PrivateKey<T, PRIV_SIZE>, public: PublicKey<T, PUB_SIZE>) -> Self {
+		Self { private, public }
 	}
 
-	fn pub_size() -> usize {
-		PUB_KEY_SIZE
+	pub fn public_key(&self) -> &PublicKey<T, PUB_SIZE> {
+		&self.public
 	}
-}
 
-impl<const PRIV_KEY_SIZE: usize, const PUB_KEY_SIZE: usize> KeyPair<PRIV_KEY_SIZE, PUB_KEY_SIZE> {
-	pub fn from_private(private: &[u8; PRIV_KEY_SIZE]) -> Self {
-		todo!()
-	}
-	
-	pub fn new(private: &[u8; PRIV_KEY_SIZE], public: &[u8; PUB_KEY_SIZE]) -> Self {
-		Self {
-			private: private.clone(),
-			public: public.clone()
-		}
+	pub fn private_key(&self) -> &PrivateKey<T, PRIV_SIZE> {
+		&self.private
 	}
 }
 
-pub type KeyPairX448 = KeyPair<56, 56>;
-pub type KeyPairNtru = KeyPair<1120, 1027>;
+impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> Clone for KeyPair<T, PRIV_SIZE, PUB_SIZE> {
+	fn clone(&self) -> Self {
+		Self::new(self.private.clone(), self.public.clone())
+	}
+}
+// TODO: introduce size() for this or any another phantom type to check when deserializing
+
+pub trait KeyPairSize {
+	const PRIV: usize;
+	const PUB: usize;
+}
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
-	fn test_size_specs() {
-		todo!()
-	}
-	
-	#[test]
 	fn test_new() {
-		let pair = KeyPair::<2, 4>::new(&[1u8, 2], &[1u8, 2, 3, 4]);
+		struct TestKeyType;
 
-		assert_eq!(5, KeyPair::<5, 5>::priv_size());
+		let private = PrivateKey::<TestKeyType, 2>::new(b"12".to_owned());
+		let public = PublicKey::<TestKeyType, 4>::new(b"1234".to_owned());
 
-		assert_eq!(pair.private.len(), 2);
-		assert_eq!(pair.public.len(), 4);
+		let _ = KeyPair::<TestKeyType, 2, 4>::new(private, public);
+
+		// this won't compile because of different types:
+		// let bad_key = PublicKey::<OtherType, 4>::new(b"1234".to_owned());
+		// let kp = KeyPair::<TestKeyType, 2, 4>::new(private, bad_key);
+
+		// this won't compile because of different sizes:
+		// let bad_key = PublicKey::<TestKeyType, 10>::new(b"0123456789".to_owned());
+		// let kp = KeyPair::<TestKeyType, 2, 4>::new(private, bad_key);
 	}
 }

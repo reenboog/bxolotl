@@ -1,19 +1,26 @@
-pub struct PublicKey<const SIZE: usize> {
-	key: [u8; SIZE]
-}
+use crate::{key::key, id};
 
-impl<const SIZE: usize> PublicKey<SIZE> {
-	fn id() -> u64 {
-		todo!()
+key!(PublicKey);
+
+impl<T, const SIZE: usize> PublicKey<T, SIZE> {
+	// TODO: should it be i64 or u64? On iOS, protobuf definitions are mapped to UInt64
+	pub fn id(&self) -> u64 {
+		id::from_bytes(&self.bytes)
 	}
 }
 
-pub type PublicKeyX448 = PublicKey<56>;
-
 #[cfg(test)]
 mod tests {
+	use super::PublicKey;
+
+	struct TestKeyType;
+	type TestPublicKey = PublicKey<TestKeyType, 10>;
+
 	#[test]
-	fn test_calc_id() {
-		todo!()
+	fn test_id() {
+		let key = TestPublicKey::new(b"0123456789".to_owned());
+		let id = key.id();
+
+		assert_eq!(9572568648884945950, id);
 	}
 }
