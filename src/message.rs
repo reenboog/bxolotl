@@ -4,7 +4,8 @@ use crate::{key_exchange::KeyExchange, ntru::NtruEncryptedKey, x448::PublicKeyX4
 // MessageType
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Type {
-	Chat, InterDevice
+	Chat = 0, 
+	InterDevice = 1
 }
 
 #[derive(PartialEq, Debug)]
@@ -19,15 +20,6 @@ pub enum Error {
 	BadNtruEncryptedKeyFormat,
 	BadKeyExchange,
 	NoRatchetKeySupplied
-}
-
-impl From<Type> for i32 {
-	fn from(t: Type) -> Self {
-		match t {
-			Type::Chat => 0,
-			Type::InterDevice => 1
-		}
-	}
 }
 
 impl TryFrom<i32> for Type {
@@ -80,7 +72,7 @@ impl From<&Message> for proto::CryptoMessage {
 			previous_counter: Some(src.prev_counter),
 			ciphertext: Some(src.ciphertext.clone()),
 			key_exchange: src.key_exchange.as_ref().map(|kex| kex.into()),
-			message_type: Some(i32::from(src._type))
+			message_type: Some(src._type as i32)
 		}
 	}
 }
@@ -280,12 +272,6 @@ mod tests {
 		assert!(msg.ratchet_key.is_none());
 		assert!(msg.ntru_encrypted_ratchet_key.is_some());
 		assert!(msg.key_exchange.is_some());
-	}
-
-	#[test]
-	fn test_message_type_to_i32() {
-		assert_eq!(i32::from(Type::Chat), 0);
-		assert_eq!(i32::from(Type::InterDevice), 1);
 	}
 
 	#[test]
