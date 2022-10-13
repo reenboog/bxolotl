@@ -115,7 +115,7 @@ mod tests {
 		let pk = KeyPairEd448::generate();
 		let public = PublicKeyEd448::from_private(pk.private_key());
 
-		assert_eq!(pk.public_key().as_bytes(), public.as_bytes());
+		assert_eq!(pk.public_key(), &public);
 	}
 
 	#[test]

@@ -123,6 +123,6 @@ mod tests {
 		let dh_ba = dh_exchange(bob_kp.private_key(), alice_kp.public_key());
 
 		assert_ne!(dh_ab.as_bytes().to_owned(), [0u8; KeyTypeX448::SHARED]);
-		assert_eq!(dh_ab.as_bytes().to_owned(), dh_ba.as_bytes().to_owned());
+		assert_eq!(dh_ab, dh_ba);
 	}
 }

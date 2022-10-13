@@ -1,4 +1,4 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct RootKey([u8; Self::SIZE]);
 
 impl RootKey {

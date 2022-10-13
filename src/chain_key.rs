@@ -116,7 +116,7 @@ mod tests {
 		let next1 = ck1.next();
 
 		assert_eq!(next0.counter, next1.counter);
-		assert_ne!(next0.key.as_bytes(), next1.key.as_bytes());
+		assert_ne!(next0.key, next1.key);
 	}
 
 	#[test]
@@ -125,7 +125,7 @@ mod tests {
 		let deserialized = ChainKey::deserialize(&ck.serialize()).unwrap();
 
 		assert_eq!(deserialized.counter, ck.counter);
-		assert_eq!(deserialized.key.as_bytes(), ck.key.as_bytes());
+		assert_eq!(deserialized.key, ck.key);
 	}
 
 	#[test]

@@ -214,7 +214,7 @@ mod tests {
 		assert_eq!(deserialized._type, Type::Chat);
 		assert_eq!(deserialized.ciphertext(), ct);
 		assert!(deserialized.ntru_encrypted_ratchet_key().is_none());
-		assert_eq!(deserialized.ratchet_key().unwrap().as_bytes(), eph_kp.public_key().as_bytes());
+		assert_eq!(deserialized.ratchet_key().unwrap(), eph_kp.public_key());
 		assert_eq!(deserialized.key_exchange.as_ref().unwrap().x448_prekey_id, kex.x448_prekey_id);
 		assert_eq!(deserialized.key_exchange.unwrap().force_reset, true);
 	}

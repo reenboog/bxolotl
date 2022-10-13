@@ -343,8 +343,8 @@ mod tests {
 		let kp0 = KeyPairNtru::generate();
 		let kp1 = KeyPairNtru::generate();
 
-		assert_ne!(kp0.private_key().as_bytes(), kp1.private_key().as_bytes());
-		assert_ne!(kp0.public_key().as_bytes(), kp1.public_key().as_bytes());
+		assert_ne!(kp0.private_key(), kp1.private_key());
+		assert_ne!(kp0.public_key(), kp1.public_key());
 	}
 
 	#[test]
@@ -397,8 +397,8 @@ mod tests {
 		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Once { key: kp.public_key() });
 		let decrypted = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp.private_key() })?;
 
-		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
-		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+		assert_eq!(eph.public_key(), &decrypted.ephemeral);
+		assert_eq!(ntru.public_key(), &decrypted.ntru);
 
 		Ok(())
 	}
@@ -429,8 +429,8 @@ mod tests {
 		let encrypted = encrypt_ephemeral(eph.public_key(), ntru.public_key(), EncryptionMode::Double { first_key: kp_first.public_key(), second_key: kp_second.public_key() });
 		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
 
-		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
-		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+		assert_eq!(eph.public_key(), &decrypted.ephemeral);
+		assert_eq!(ntru.public_key(), &decrypted.ntru);
 
 		Ok(())
 	}
@@ -464,8 +464,8 @@ mod tests {
 		// make sure it actually decrypts
 		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
 
-		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
-		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+		assert_eq!(eph.public_key(), &decrypted.ephemeral);
+		assert_eq!(ntru.public_key(), &decrypted.ntru);
 
 		Ok(())
 	}
@@ -506,8 +506,8 @@ mod tests {
 		// make sure it actually decrypts
 		let decrypted = decrypt_ephemeral::<KeySource>(&encrypted, DecryptionMode::Once { key: kp_first.private_key() })?;
 
-		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
-		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+		assert_eq!(eph.public_key(), &decrypted.ephemeral);
+		assert_eq!(ntru.public_key(), &decrypted.ntru);
 
 		Ok(())
 	}
@@ -536,8 +536,8 @@ mod tests {
 		// make sure it actually decrypts
 		let decrypted = decrypt_ephemeral(&encrypted, DecryptionMode::Double { second_key: kp_second.private_key(), first_key: Box::new(find_key) })?;
 
-		assert_eq!(eph.public_key().as_bytes(), decrypted.ephemeral.as_bytes());
-		assert_eq!(ntru.public_key().as_bytes(), decrypted.ntru.as_bytes());
+		assert_eq!(eph.public_key(), &decrypted.ephemeral);
+		assert_eq!(ntru.public_key(), &decrypted.ntru);
 
 		Ok(())
 	}

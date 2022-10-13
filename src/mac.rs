@@ -96,7 +96,7 @@ mod tests {
 		let encoded = mac.serialize();
 		let decoded = AxolotlMac::deserialize(&encoded).unwrap();
 
-		assert_eq!(decoded.mac.as_bytes(), digest.as_bytes());
+		assert_eq!(decoded.mac, digest);
 		assert_eq!(decoded.body().counter(), msg.counter());
 		assert_eq!(decoded.body().prev_counter(), msg.prev_counter());
 		assert_eq!(decoded.body().ciphertext(), msg.ciphertext());
