@@ -110,8 +110,8 @@ impl From<std::array::TryFromSliceError> for Error {
 }
 
 pub struct Decrypted {
-	msg: Vec<u8>,
-	_type: Type
+	pub msg: Vec<u8>,
+	pub _type: Type
 }
 
 // TODO: rename
@@ -123,7 +123,7 @@ pub struct FetchedPrekeyBundle {
 }
 
 impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
-	pub async fn decrypt(&mut self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
+	pub async fn decrypt(&self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
 		// all the state change should be saved here, not by the caller – should it?
 		let mac = AxolotlMac::deserialize(mac).or(Err(Error::BadMacFormat))?;
 
