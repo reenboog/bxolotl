@@ -6,7 +6,7 @@ use crate::{proto, serializable::{Serializable, Deserializable}};
 type Encryptor = cbc::Encryptor<aes::Aes256>;
 type Decryptor = cbc::Decryptor<aes::Aes256>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Key(pub [u8; Self::SIZE]);
 
 impl Key {
@@ -15,9 +15,13 @@ impl Key {
 	pub fn generate() -> Self {
 		Self(rand::thread_rng().gen())
 	}
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
+	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Iv(pub [u8; Self::SIZE]);
 
 impl Iv {
@@ -25,6 +29,10 @@ impl Iv {
 
 	pub fn generate() -> Self {
 		Self(rand::thread_rng().gen())
+	}
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
 	}
 }
 

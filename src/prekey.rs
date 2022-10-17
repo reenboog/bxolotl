@@ -24,7 +24,7 @@ impl From<&Prekey> for proto::PreKeyData {
 		Self {
 			private_key_448: Some(src.key_x448.private_key().as_bytes().to_vec()),
 			public_key_448: Some(src.key_x448.public_key().as_bytes().to_vec()),
-			ntru_key_pair: Some(src.key_ntru.serialize()),
+			ntru_key_pair: Some(src.key_ntru.serialize()), // TODO: should this be serialized or simply concatenated?
 			last_resort: Some(src.last_resort)
 		}
 	}

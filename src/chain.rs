@@ -58,6 +58,7 @@ pub enum Error {
 	TooManyKeysSkipped
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Chain {
 	chain_key: Rc<ChainKey>,
 	ratchet_key: PublicKeyX448, // used for id only
@@ -232,5 +233,100 @@ mod tests {
 	#[test]
 	fn test_commit() {
 		// todo!()
+	}
+}
+
+mod serialize {
+	use std::{rc::Rc, collections::HashMap};
+	use prost::Message;
+	use crate::{proto, serializable::{Serializable, Deserializable}, message_key::MessageKey, chain_key::ChainKey, x448::PublicKeyX448, ntru::KeyPairNtru};
+	use super::{Chain, MAX_KEYS_TO_SKIP};
+
+	#[derive(Debug)]
+	pub enum Error {
+		NoChainKey,
+		WrongChainKeyLen,
+		NoRatchetKey,
+		WrongRatchetKeyLen,
+		BadNtruKeyPair,
+		NoSkippedKeys,
+		BadFormat
+	}
+
+	impl From<&Chain> for proto::session_state::Chain {
+		fn from(src: &Chain) -> Self {
+			use proto::session_state::MessageKey as MK;
+
+			let message_keys: Vec<MK> = src.skipped_keys.iter().map(|(k, v)| {
+				let mut mk = MK::from(v.as_ref());
+
+				mk.counter = Some(*k);
+				mk
+			}).collect();
+
+			Self {
+				ratchet_key: Some(src.ratchet_key().as_bytes().to_vec()),
+				chain_key: Some(src.chain_key().as_ref().into()),
+				message_keys,
+				next_counter: Some(src.next_counter),
+				ratchet_ntru_key_pair: src.ntru_ratchet_key().as_ref().map(|k| k.serialize()) // TODO: concat instead of serialize?
+			}
+		}
+	}
+
+	impl Serializable for Chain {
+		fn serialize(&self) -> Vec<u8> {
+			proto::session_state::Chain::from(self).encode_to_vec()
+		}
+	}
+
+	impl TryFrom<proto::session_state::Chain> for Chain {
+		type Error = Error;
+
+		fn try_from(value: proto::session_state::Chain) -> Result<Self, Self::Error> {
+			let skipped_keys = value.message_keys
+				.into_iter()
+				.filter_map(|k| {
+					k.counter.and_then(|c| {
+						MessageKey::try_from(k).ok().map(|mk| {
+							(c, Rc::new(mk))
+						})
+					})
+				})
+				.collect::<HashMap<u32, Rc<MessageKey>>>();
+
+			Ok(Self {
+				chain_key: Rc::new(ChainKey::try_from(value.chain_key.ok_or(Error::NoChainKey)?).or(Err(Error::WrongChainKeyLen))?),
+				ratchet_key: PublicKeyX448::try_from(value.ratchet_key.ok_or(Error::NoRatchetKey)?).or(Err(Error::WrongRatchetKeyLen))?,
+				ntru_ratchet_key: value.ratchet_ntru_key_pair.map_or(Ok(None), |kp| Ok(Some(KeyPairNtru::deserialize(&kp).or(Err(Error::BadNtruKeyPair))?)))?,
+				skipped_keys,
+				next_counter: value.next_counter.unwrap_or(0),
+				max_keys_to_skip: MAX_KEYS_TO_SKIP // doesn't need to be persisted
+			})
+		}
+	}
+
+	impl Deserializable for Chain {
+		type Error = Error;
+
+		fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+			Self::try_from(proto::session_state::Chain::decode(buf).or(Err(Error::BadFormat))?)
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+    use crate::{chain::{Chain, MAX_KEYS_TO_SKIP}, x448::KeyPairX448, chain_key::ChainKey, hmac, serializable::{Serializable, Deserializable}};
+
+		#[test]
+		fn serialize_deserialize() {
+			let kp = KeyPairX448::generate();
+			let ck = ChainKey::new(hmac::Key::new([123u8; hmac::Key::SIZE]), 117);
+			let ch = Chain::new(kp.public_key().to_owned(), ck, MAX_KEYS_TO_SKIP);
+			let serialized = ch.serialize();
+			let deserialized = Chain::deserialize(&serialized).unwrap();
+
+			assert_eq!(deserialized, ch);
+		}
 	}
 }

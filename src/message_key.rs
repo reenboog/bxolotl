@@ -1,5 +1,6 @@
-use crate::{mac::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::Serializable};
+use crate::{mac::AxolotlMac, aes_cbc::{self, AesCbc}, hmac, message::Message, serializable::{Serializable}};
 
+#[derive(Debug, PartialEq)]
 pub struct MessageKey {
 	enc_key: aes_cbc::Key, // derived from chain_key.get_message_keys via kdf
 	mac_key: hmac::Key, // derived from chain_key.get_message_keys via kdf
@@ -135,4 +136,77 @@ mod tests {
 
 		assert_eq!(decrypted, pt);
 	}	
+}
+
+mod serialize {
+	use crate::{proto, serializable::{Serializable, Deserializable}, aes_cbc, hmac};
+	use super::MessageKey;
+
+	#[derive(Debug, PartialEq)]
+	pub enum Error {
+		NoEncryptionKey,
+		WrongEncryptionKeyLen,
+		NoMacKey,
+		WrongMacKeyLen,
+		NoIv,
+		WrongIvLen,
+		BadFormat
+	}
+
+	impl From<&MessageKey> for proto::session_state::MessageKey {
+		fn from(src: &MessageKey) -> Self {
+			Self {
+				enc_key: Some(src.enc_key().as_bytes().to_vec()),
+				mac_key: Some(src.mac_key().as_bytes().to_vec()),
+				iv: Some(src.iv().as_bytes().to_vec()),
+				counter: None,
+				// no check whether the key is too old exists yet; do we need any?
+				ts: None
+			}
+		}
+	}
+
+	impl Serializable for MessageKey {
+		fn serialize(&self) -> Vec<u8> {
+			use prost::Message;
+
+			proto::session_state::MessageKey::from(self).encode_to_vec()
+		}
+	}
+
+	impl TryFrom<proto::session_state::MessageKey> for MessageKey {
+		type Error = Error;
+
+		fn try_from(value: proto::session_state::MessageKey) -> Result<Self, Self::Error> {
+			Ok(Self {
+				enc_key: aes_cbc::Key::try_from(value.enc_key.ok_or(Error::NoEncryptionKey)?).or(Err(Error::WrongEncryptionKeyLen))?,
+				mac_key: hmac::Key::try_from(value.mac_key.ok_or(Error::NoMacKey)?).or(Err(Error::WrongMacKeyLen))?,
+				iv: aes_cbc::Iv::try_from(value.iv.ok_or(Error::NoIv)?).or(Err(Error::WrongIvLen))? 
+			})
+		}
+	}
+
+	impl Deserializable for MessageKey {
+		type Error = Error;
+
+		fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+			use prost::Message;
+
+			Self::try_from(proto::session_state::MessageKey::decode(buf).or(Err(Error::BadFormat))?)
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+    use crate::{message_key::MessageKey, serializable::{Serializable, Deserializable}};
+
+		#[test]
+		fn test_serialize_deserialize() {
+			let mk = MessageKey::from(&[42u8; MessageKey::SIZE]);
+			let serialized = mk.serialize();
+			let deserialized = MessageKey::deserialize(&serialized).unwrap();
+
+			assert_eq!(mk, deserialized);
+		}
+	}
 }

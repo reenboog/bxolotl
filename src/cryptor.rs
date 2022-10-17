@@ -149,6 +149,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 				// GET users/cid.{identity, identity_ntru, signing_identity} == kex.{identity, identity_ntru, signing_identity}
 				// ^ if no match, ignore the message?
 				// ^ if http error, try later?
+				// ^ if the sending account is deleted, ignore?
 				let mut session = Session::bob(identity, ntru_identity, signed_prekey, key_x448, key_ntru, their_identity, their_key_x448, their_key_ntru);
 
 				// TODO: check current.has_receive only first? –if yes, clear as well
