@@ -164,7 +164,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 							if should_be_alice(my_nid, nid) {
 								// the sender is considering herself Alice (but they'll fix themselves eventually), so keep 
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
-								session.set_read_only();
+								session.set_receive_only();
 
 								return self.decrypt_with_session(session, mac, nid).await;
 							} else {

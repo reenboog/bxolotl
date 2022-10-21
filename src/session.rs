@@ -65,7 +65,7 @@ impl From<chain::Error> for Error {
 pub struct Session {
 	id: u64,
 	role: Role,
-	read_only: bool,
+	receive_only: bool,
 
 	counter: u32,
 	prev_counter: u32, // prev sending chain len?
@@ -98,7 +98,7 @@ impl Session {
 	}
 
 	pub fn receive_only(&self) -> bool {
-		self.read_only
+		self.receive_only
 	}
 
 	pub fn role(&self) -> Role {
@@ -134,7 +134,7 @@ impl Session {
 			Self {
 				id,
 				role: Role::Alice,
-				read_only: false,
+				receive_only: false,
 				counter: 0,
 				prev_counter: 0,
 				ratchet_counter: 0,
@@ -164,7 +164,7 @@ impl Session {
 			Self {
 				id,
 				role: Role::Bob, 
-				read_only: false,
+				receive_only: false,
 				counter: 0, 
 				prev_counter: 0, 
 				ratchet_counter: 0,
@@ -182,8 +182,8 @@ impl Session {
 }
 
 impl Session {
-	pub fn set_read_only(&mut self) {
-		self.read_only = true
+	pub fn set_receive_only(&mut self) {
+		self.receive_only = true
 	}
 
 	pub fn force_ntru_for_next(&mut self) {
@@ -892,7 +892,8 @@ mod serialize {
 		NoRootKey,
 		BadSendChainKey,
 		BadReceiveChain,
-		BadFormat
+		BadFormat,
+NoReceiveOnly,
 	}
 
 	impl TryFrom<u32> for Role {
@@ -931,7 +932,8 @@ mod serialize {
 				their_ratchet_ntru_key: Some(src.their_ratchet_ntru.as_bytes().to_vec()),
 				ratchet_counter: Some(src.ratchet_counter),
 				my_ntru_identity: src.my_ntru_identity.as_ref().map(|i| i.serialize()),
-				failed: Some(false)
+				failed: Some(false),
+				receive_only: Some(src.receive_only)
 			}
 		}
 	}
@@ -949,7 +951,7 @@ mod serialize {
 			Ok(Self {
 				id: value.id.ok_or(Error::NoId)?,
 				role: value.role.map_or(Err(Error::NoRole), |r| Role::try_from(r))?,
-				read_only: false, // FIXME: not persisted currently
+				receive_only: value.receive_only.ok_or(Error::NoReceiveOnly)?,
 				counter: value.counter.ok_or(Error::NoCounter)?,
 				prev_counter: value.prev_counter.ok_or(Error::NoPrevCounter)?,
 				ratchet_counter: value.ratchet_counter.ok_or(Error::NoRatchetCounter)?,
