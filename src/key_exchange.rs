@@ -14,7 +14,7 @@ pub enum Error {
 	NoX448PrekeyId
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct KeyExchange {
 	pub x448_identity: PublicKeyX448,
 	pub ntru_encrypted_ephemeral: NtruEncryptedKey,

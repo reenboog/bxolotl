@@ -21,7 +21,7 @@ impl From<aes_cbc::Error> for Error {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NtruEncrypted {
 	pub encryption_key_id: u64, // encrypting_ntru_key_id
 	pub aes_params: Vec<u8>, // ntru_encrypted_aes_params 
@@ -113,7 +113,7 @@ impl Deserializable for NtruedKeys {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NtruEncryptedKey {
 	pub key_id: u64, // ephemeral_key_id
 	pub double_encrypted: bool,

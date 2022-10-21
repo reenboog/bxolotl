@@ -1,10 +1,11 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::{SignedPublicKeyX448}, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, mac::AxolotlMac, serializable::{Serializable, Deserializable}};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::SignedPublicKeyX448, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, ntru::{self, NtruEncryptedKey, NtruedKeys, KeyPairNtru, PublicKeyNtru, PrivateKeyNtru}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, mac::AxolotlMac, serializable::{Serializable, Deserializable}};
 
 pub const RATCHETS_BETWEEN_NTRU: u32 = 20;
 
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Debug, Eq, Copy, Clone)]
 pub enum Role {
-	Alice, Bob
+	Alice = 0,
+	Bob = 1
 }
 
 #[derive(Debug, PartialEq)]
@@ -60,6 +61,7 @@ impl From<chain::Error> for Error {
 	}
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Session {
 	id: u64,
 	role: Role,
@@ -89,22 +91,6 @@ pub struct Session {
 }
 
 unsafe impl Send for Session {}
-
-impl Serializable for Session {
-	fn serialize(&self) -> Vec<u8> {
-		// TODO: implement
-		todo!()
-	}
-}
-
-impl Deserializable for Session {
-	type Error = Error;
-
-	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
-		// TODO: implement
-		todo!()
-	}
-}
 
 impl Session {
 	pub fn id(&self) -> u64 {
@@ -365,7 +351,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{PublicKeyX448, KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU, chain, hmac};
+	use crate::{x448::{KeyPairX448}, ed448::KeyPairEd448, ntru::{KeyPairNtru, PrivateKeyNtru, NtruedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_NTRU, chain, hmac};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -446,7 +432,7 @@ mod tests {
 		SignedKeyPairX448::new(kp.private_key().clone(), SignedPublicKeyX448::new(kp.public_key().clone(), bob_ed448_identity().private_key().sign(kp.public_key().as_bytes())))
 	}
 
-	fn alice_session() -> Session {
+	pub fn alice_session() -> Session {
 		Session::alice(
 			alice_x448_identity(),
 			alice_ephemeral(),
@@ -883,5 +869,122 @@ mod tests {
 		a1.set_mac(hmac::digest(&hmac::Key::new([42u8; 32]), b"fake message"));
 
 		assert_eq!(bob.decrypt(&a1).err(), Some(Error::WrongMac));
+	}
+}
+
+mod serialize {
+	#[derive(Debug)]
+	pub enum Error {
+		NoId,
+		NoRole,
+		BadRole,
+		NoCounter,
+		NoPrevCounter,
+		NoRatchetCounter,
+		BadMyNtruIdentity,
+		BadMyRatchet,
+		BadMyNtruRatchet,
+		BadTheirRatchet,
+		NoTheirRatchetNtru,
+		BadTheirNtruRatchet,
+		BadKeyExchange,
+		BadRootKey,
+		NoRootKey,
+		BadSendChainKey,
+		BadReceiveChain,
+		BadFormat
+	}
+
+	impl TryFrom<u32> for Role {
+		type Error = Error;
+
+		fn try_from(value: u32) -> Result<Self, Self::Error> {
+			match value {
+				0 => Ok(Self::Alice),
+				1 => Ok(Self::Bob),
+				_ => Err(Error::BadRole)
+			}
+		}
+	}
+
+	use crate::{serializable::{Serializable, Deserializable}, proto, ntru::{KeyPairNtru, PublicKeyNtru}, x448::{KeyPairX448, PublicKeyX448}, key_exchange::KeyExchange, root_key::RootKey, chain_key::ChainKey, receive_chain::ReceiveChain};
+	use super::{Session, Role};
+	use prost::Message;
+
+	impl From<&Session> for proto::SessionState {
+		fn from(src: &Session) -> Self {
+			Self {
+				id: Some(src.id),
+				role: Some(src.role as u32),
+				their_identity: None,
+				root_key: Some(src.root_key.as_bytes().to_vec()),
+				send_chain_key: src.send_chain_key.as_ref().map(|k| k.into()),
+				receive_chain: (&src.receive_chain).into(),
+				my_ratchet: src.my_ratchet.as_ref().map(|r| r.serialize()),
+				their_ratchet: src.their_ratchet.as_ref().map(|r| r.as_bytes().to_vec()),
+				ratchet_flag: None,
+				counter: Some(src.counter),
+				prev_counter: Some(src.prev_counter),
+				key_exchange: src.unacked_key_exchange.as_ref().map(|kex| kex.into()),
+				alice_base_key: None,
+				my_ratchet_ntru_key: src.my_ntru_ratchet.as_ref().map(|r| r.serialize()),
+				their_ratchet_ntru_key: Some(src.their_ratchet_ntru.as_bytes().to_vec()),
+				ratchet_counter: Some(src.ratchet_counter),
+				my_ntru_identity: src.my_ntru_identity.as_ref().map(|i| i.serialize()),
+				failed: Some(false)
+			}
+		}
+	}
+
+	impl Serializable for Session {
+		fn serialize(&self) -> Vec<u8> {
+			proto::SessionState::from(self).encode_to_vec()
+		}
+	}
+
+	impl TryFrom<proto::SessionState> for Session {
+    type Error = Error;
+
+    fn try_from(value: proto::SessionState) -> Result<Self, Self::Error> {
+			Ok(Self {
+				id: value.id.ok_or(Error::NoId)?,
+				role: value.role.map_or(Err(Error::NoRole), |r| Role::try_from(r))?,
+				read_only: false, // FIXME: not persisted currently
+				counter: value.counter.ok_or(Error::NoCounter)?,
+				prev_counter: value.prev_counter.ok_or(Error::NoPrevCounter)?,
+				ratchet_counter: value.ratchet_counter.ok_or(Error::NoRatchetCounter)?,
+				my_ntru_identity: value.my_ntru_identity.map_or(Ok(None), |i| Ok(Some(KeyPairNtru::deserialize(&i).or(Err(Error::BadMyNtruIdentity))?)))?,
+				my_ratchet: value.my_ratchet.map_or(Ok(None), |r| Ok(Some(KeyPairX448::deserialize(&r).or(Err(Error::BadMyRatchet))?)))?,
+				my_ntru_ratchet: value.my_ratchet_ntru_key.map_or(Ok(None), |i| Ok(Some(KeyPairNtru::deserialize(&i).or(Err(Error::BadMyNtruRatchet))?)))?,
+				their_ratchet: value.their_ratchet.map_or(Ok(None), |r| Ok(Some(PublicKeyX448::try_from(r).or(Err(Error::BadTheirRatchet))?)))?,
+				their_ratchet_ntru: PublicKeyNtru::try_from(value.their_ratchet_ntru_key.ok_or(Error::NoTheirRatchetNtru)?).or(Err(Error::BadTheirNtruRatchet))?,
+				unacked_key_exchange: value.key_exchange.map_or(Ok(None), |kex| Ok(Some(KeyExchange::try_from(kex).or(Err(Error::BadKeyExchange))?)))?,
+				root_key: RootKey::try_from(value.root_key.ok_or(Error::NoRootKey)?).or(Err(Error::BadRootKey))?,
+				send_chain_key: value.send_chain_key.map_or(Ok(None), |k| Ok(Some(ChainKey::try_from(k).or(Err(Error::BadSendChainKey))?)))?,
+				receive_chain: ReceiveChain::try_from(value.receive_chain).or(Err(Error::BadReceiveChain))?
+			})
+    }
+}
+
+	impl Deserializable for Session {
+		type Error = Error;
+
+		fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+			Self::try_from(proto::SessionState::decode(buf).or(Err(Error::BadFormat))?)
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+    use crate::{serializable::{Serializable, Deserializable}, session::Session};
+
+		#[test]
+		fn test_serialize_deserialize() {
+			let session = super::super::tests::alice_session();
+			let serialized = session.serialize();
+			let deserialized = Session::deserialize(&serialized).unwrap();
+
+			assert_eq!(session, deserialized);
+		}
 	}
 }

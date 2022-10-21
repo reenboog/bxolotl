@@ -13,4 +13,12 @@ impl RootKey {
 	}
 }
 
-// used to derive chain keys and subsequent root keys
+impl TryFrom<Vec<u8>> for RootKey {
+	type Error = std::array::TryFromSliceError;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		let slice: [u8; Self::SIZE] = value.as_slice().try_into()?;
+
+		Ok(Self::new(slice))
+	}
+}
