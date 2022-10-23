@@ -2,7 +2,7 @@ use std::{sync::Arc, fmt::Display};
 
 use async_trait::async_trait;
 use prost::encoding::bool;
-use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, ntru::{KeyPairNtru, NtruedKeys, self, PrivateKeyNtru, DecryptionMode::Double, PublicKeyNtru}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
+use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KyberedKeys, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
 
 /*
 
@@ -29,7 +29,7 @@ pub trait Storage {
 	// Identity
 	async fn get_my_x448_identity(&self) -> Option<KeyPairX448>; // TODO: Result with a custom error type?
 	async fn get_my_ed448_identity(&self) -> Option<KeyPairEd448>;
-	async fn get_my_ntru_identity(&self) -> Option<KeyPairNtru>; // TODO: result with a custom error type?
+	async fn get_my_kyber_identity(&self) -> Option<KeyPairKyber>; // TODO: result with a custom error type?
 	
 	async fn get_identity_keys_for_nid(&self, nid: &str) -> Option<IdentityKeys>;
 	async fn save_identity_keys_for_nid(&self, identity: &IdentityKeys, nid: &str);
@@ -73,7 +73,7 @@ pub enum Error {
 	/// DB is locked/corrupted/not ready; try again later
 	NoIdentityFound = 2,
 	/// DB is locked/corrupted/not ready; try again later
-	NoNtruIdentityFound = 3,
+	NoKyberIdentityFound = 3,
 	/// DB is locked/corrupted/not ready; try again later
 	NoSigningIdentityFound = 4,
 	/// Previously saved identity does not match with the backend's response; reset?
@@ -83,7 +83,7 @@ pub enum Error {
 	/// A prekey has already been used by someone else (quite impossible) or there was a crash previously; reset
 	NoPrekeyFound = 7,
 	/// ephemeral_key was encrypted only once or first_key/second_key order was not respected
-	BadNtruEncryptedEphemeral = 8,
+	BadKyberEncryptedEphemeral = 8,
 	/// No session found for given nid; reset
 	NoSessionFound = 9,
 	/// Current session is corrupted; reset
@@ -117,7 +117,7 @@ pub struct Decrypted {
 // TODO: rename
 pub struct FetchedPrekeyBundle {
 	pub prekey_x448: PublicKeyX448,
-	pub prekey_ntru: PublicKeyNtru,
+	pub prekey_kyber: PublicKeyKyber,
 	pub signed_prekey_x448: SignedPublicKeyX448,
 	pub identity: IdentityKeys
 }
@@ -134,23 +134,23 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 				return self.decrypt_with_session(session, mac, nid).await;
 			} else {
 				let identity = self.storage.get_my_x448_identity().await.ok_or(Error::NoIdentityFound)?;
-				let ntru_identity = self.storage.get_my_ntru_identity().await.ok_or(Error::NoNtruIdentityFound)?;
+				let kyber_identity = self.storage.get_my_kyber_identity().await.ok_or(Error::NoKyberIdentityFound)?;
 				let signed_prekey = self.storage.get_signed_prekey(kex.signed_prekey_id).await.ok_or(Error::NoSignedPrekeyFound)?;
-				let Prekey { key_x448, key_ntru, .. } = self.storage.get_prekey(kex.x448_prekey_id).await.ok_or(Error::NoPrekeyFound)?;
-				let find_key = |_| -> Result<&PrivateKeyNtru, ntru::Error> {
-					Ok(key_ntru.private_key())
+				let Prekey { key_x448, key_kyber, .. } = self.storage.get_prekey(kex.x448_prekey_id).await.ok_or(Error::NoPrekeyFound)?;
+				let find_key = |_| -> Result<&PrivateKeyKyber, kyber::Error> {
+					Ok(key_kyber.private_key())
 				};
-				let NtruedKeys { ephemeral: their_key_x448, ntru: their_key_ntru } = ntru::decrypt_ephemeral(
-					&kex.ntru_encrypted_ephemeral,
-					Double { second_key: ntru_identity.private_key(), first_key: Box::new(find_key) }).or(Err(Error::BadNtruEncryptedEphemeral))?;
+				let KyberedKeys { ephemeral: their_key_x448, kyber: their_key_kyber } = kyber::decrypt_keys(
+					&kex.kyber_encrypted_ephemeral,
+					Double { second_key: kyber_identity.private_key(), first_key: Box::new(find_key) }).or(Err(Error::BadKyberEncryptedEphemeral))?;
 				let their_identity = kex.x448_identity.clone(); 
 				// FIXME: should I save this new identity by DB?
 				// TODO: make sure nid corresponds to the supplied identity by:
-				// GET users/cid.{identity, identity_ntru, signing_identity} == kex.{identity, identity_ntru, signing_identity}
+				// GET users/cid.{identity, identity_kyber, signing_identity} == kex.{identity, identity_kyber, signing_identity}
 				// ^ if no match, ignore the message?
 				// ^ if http error, try later?
 				// ^ if the sending account is deleted, ignore?
-				let mut session = Session::bob(identity, ntru_identity, signed_prekey, key_x448, key_ntru, their_identity, their_key_x448, their_key_ntru);
+				let mut session = Session::bob(identity, kyber_identity, signed_prekey, key_x448, key_kyber, their_identity, their_key_x448, their_key_kyber);
 
 				// TODO: check current.has_receive only first? –if yes, clear as well
 				if kex.force_reset {
@@ -216,7 +216,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 		}
 	}
 
-	// force_ntru, as is now implemented, is not what it might look like: it can ntru-encrypt my next ratchet when the time
+	// force_kyber, as is now implemented, is not what it might look like: it can kyber-encrypt my next ratchet when the time
 	// to turn comes, but it can't turn it emmidiately because of Axolotl's strict ping-pong nature
 	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, my_nid: &str, auth_token: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
 		if force_reset {
@@ -227,14 +227,14 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 			return self.encrypt_with_session(current, plaintext, _type, nid).await;
 		} else {
 			let my_identity = self.storage.get_my_x448_identity().await.ok_or(Error::NoIdentityFound)?;
-			let my_ntru_identity = self.storage.get_my_ntru_identity().await.ok_or(Error::NoNtruIdentityFound)?;
+			let my_kyber_identity = self.storage.get_my_kyber_identity().await.ok_or(Error::NoKyberIdentityFound)?;
 			let my_signing_identity = self.storage.get_my_ed448_identity().await.ok_or(Error::NoSigningIdentityFound)?;
 			let my_ratchet = KeyPairX448::generate();
-			let my_ntru_ratchet = KeyPairNtru::generate();
+			let my_kyber_ratchet = KeyPairKyber::generate();
 			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token).await?; // TODO: respect UserDoesNotExist + network errors
 
 			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid).await {
-				if identity.x448 != bundle.identity.x448 || identity.ntru != bundle.identity.ntru || identity.ed448 != bundle.identity.ed448 {
+				if identity.x448 != bundle.identity.x448 || identity.kyber != bundle.identity.kyber || identity.ed448 != bundle.identity.ed448 {
 					return Err(Error::IdentityDoesNotMatch);
 				}
 			} else {
@@ -244,13 +244,13 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 			let session = Session::alice(my_identity,
 				my_ratchet,
 				my_signing_identity,
-				my_ntru_identity,
-				my_ntru_ratchet, 
+				my_kyber_identity,
+				my_kyber_ratchet, 
 				bundle.identity.x448,
 				bundle.signed_prekey_x448,
 				bundle.prekey_x448,
-				bundle.prekey_ntru,
-				bundle.identity.ntru,
+				bundle.prekey_kyber,
+				bundle.identity.kyber,
 				force_reset);
 
 				return self.encrypt_with_session(session, plaintext, _type, nid).await;

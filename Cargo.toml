@@ -20,8 +20,9 @@ rand-07 = { package = "rand", version = "0.7.0" }
 sha2 = { version = "0.10" }
 hmac = { version = "0.12.1" }
 
-# ntru
-ntrust = { git = "ssh://git@git.onyxcorp.net/ccf/ntrust.git", branch = "master" }
+# kyber
+pqcrypto-traits = { version = "0.3"}
+pqcrypto-kyber = { version = "0.7"}
 
 #448 ec
 x448 = { version = "0.6" }

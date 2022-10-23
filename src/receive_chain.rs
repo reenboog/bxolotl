@@ -1,5 +1,5 @@
 use std::{collections::VecDeque};
-use crate::{chain::Chain, x448::PublicKeyX448, ntru::KeyPairNtru, proto};
+use crate::{chain::Chain, x448::PublicKeyX448, kyber::KeyPairKyber, proto};
 
 #[derive(Debug, PartialEq)]
 pub struct ReceiveChain {
@@ -63,8 +63,8 @@ impl ReceiveChain {
 		self.chains.iter_mut().find(|c| c.ratchet_key().id() == ratchet.id())
 	}
 
-	pub fn ntru_key_pair(&self, id: u64) -> Option<&KeyPairNtru> {
-		self.chains.iter().flat_map(|c| c.ntru_ratchet_key()).find(|pk| pk.public_key().id() == id)
+	pub fn kyber_key_pair(&self, id: u64) -> Option<&KeyPairKyber> {
+		self.chains.iter().flat_map(|c| c.kyber_ratchet_key()).find(|pk| pk.public_key().id() == id)
 	}
 }
 
@@ -110,7 +110,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_get_ntru_key_pair() {
+	fn test_get_kyber_key_pair() {
 		// todo!()
 	}
 }

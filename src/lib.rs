@@ -16,7 +16,7 @@ pub mod signed_key_pair;
 pub mod key_exchange;
 pub mod chain;
 pub mod ed448;
-pub mod ntru;
+pub mod kyber;
 pub mod serializable;
 pub mod x448;
 pub mod master_key;

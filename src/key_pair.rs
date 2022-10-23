@@ -1,7 +1,7 @@
 use crate::{proto, private_key::PrivateKey, public_key::PublicKey, serializable::{Deserializable, Serializable}};
 use prost::Message;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
 	WrongPrivKeyLen,
 	WrongPubKeyLen,
@@ -104,8 +104,8 @@ mod tests {
 
 		let kp = KeyPair::<TestKeyType, 2, 4>::new(private, public);
 		let serialized = kp.serialize();
-		let deserialized = KeyPair::<TestKeyType, 2, 4>::deserialize(&serialized).unwrap();
+		let deserialized = KeyPair::<TestKeyType, 2, 4>::deserialize(&serialized);
 
-		assert_eq!(kp, deserialized);
+		assert_eq!(Ok(kp), deserialized);
 	}
 }

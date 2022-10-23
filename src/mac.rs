@@ -1,5 +1,6 @@
 use crate::{message::Message, hmac::Digest, proto, serializable::{Serializable, Deserializable}};
 
+#[derive(Debug, PartialEq)]
 pub struct AxolotlMac {
 	body: Message,
 	mac: Digest
@@ -94,12 +95,9 @@ mod tests {
 
 		let mac = AxolotlMac::new(&msg, &digest);
 		let encoded = mac.serialize();
-		let decoded = AxolotlMac::deserialize(&encoded).unwrap();
+		let deserialized = AxolotlMac::deserialize(&encoded);
 
-		assert_eq!(decoded.mac, digest);
-		assert_eq!(decoded.body().counter(), msg.counter());
-		assert_eq!(decoded.body().prev_counter(), msg.prev_counter());
-		assert_eq!(decoded.body().ciphertext(), msg.ciphertext());
+		assert_eq!(Ok(mac), deserialized);
 	}
 
 	#[test]

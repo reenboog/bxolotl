@@ -1,21 +1,21 @@
 use prost::Message;
-use crate::{proto, x448::{KeyPairX448, PrivateKeyX448, PublicKeyX448}, ntru::KeyPairNtru, serializable::{Serializable, Deserializable}};
+use crate::{proto, x448::{KeyPairX448, PrivateKeyX448, PublicKeyX448}, kyber::KeyPairKyber, serializable::{Serializable, Deserializable}};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
 	WrongX448PrivateLen,
-	WrongX448PublicLen,
-	WrongNtruLen,
 	NoX448Private,
+	WrongX448PublicLen,
 	NoX448Public,
-	NoNtru,
+	WrongKyberLen,
+	NoKyber,
 	BadFormat
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Prekey {
 	pub key_x448: KeyPairX448,
-	pub key_ntru: KeyPairNtru,
+	pub key_kyber: KeyPairKyber,
 	pub last_resort: bool
 }
 
@@ -24,7 +24,7 @@ impl From<&Prekey> for proto::PreKeyData {
 		Self {
 			private_key_448: Some(src.key_x448.private_key().as_bytes().to_vec()),
 			public_key_448: Some(src.key_x448.public_key().as_bytes().to_vec()),
-			ntru_key_pair: Some(src.key_ntru.serialize()), // TODO: should this be serialized or simply concatenated?
+			kyber_key_pair: Some(src.key_kyber.serialize()), // TODO: should this be serialized or simply concatenated?
 			last_resort: Some(src.last_resort)
 		}
 	}
@@ -42,12 +42,12 @@ impl TryFrom<proto::PreKeyData> for Prekey {
 	fn try_from(value: proto::PreKeyData) -> Result<Self, Self::Error> {
 		let x448_priv = PrivateKeyX448::try_from(value.private_key_448.ok_or(Error::NoX448Private)?).or(Err(Error::WrongX448PrivateLen))?;
 		let x448_pub = PublicKeyX448::try_from(value.public_key_448.ok_or(Error::NoX448Public)?).or(Err(Error::WrongX448PublicLen))?;
-		let ntru = KeyPairNtru::deserialize(&value.ntru_key_pair.ok_or(Error::NoNtru)?).or(Err(Error::WrongNtruLen))?;
+		let kyber = KeyPairKyber::deserialize(&value.kyber_key_pair.ok_or(Error::NoKyber)?).or(Err(Error::WrongKyberLen))?;
 		let last_resort = value.last_resort.unwrap_or(false);
 
 		Ok(Self {
 			key_x448: KeyPairX448::new(x448_priv, x448_pub),
-			key_ntru: ntru,
+			key_kyber: kyber,
 			last_resort
 		})
 	}
@@ -67,21 +67,54 @@ impl Prekey {
 	}
 }
 
+// const DEFAULT_GENERATED_PREKEYS: u8 = 100;
+
+// pub fn generate(count: Option<u8>) -> Vec<Prekey> {
+// 	let number_of_prekeys = count.unwrap_or(DEFAULT_GENERATED_PREKEYS);
+// 	let mut generated_keys: Vec<Prekey> = Vec::new();
+// 	for i in 0..number_of_prekeys {
+// 		let key_pair_448 = KeyPairX448::generate();
+// 		let key_pair_kyber = KeyPairKyber::generate();
+
+// 		let prekey = Prekey {
+// 			id: key_pair_448.public_key().id(),
+// 			key_x448: key_pair_448,
+// 			key_kyber: key_pair_kyber,
+// 			last_resort: i == number_of_prekeys - 1,
+// 		};
+
+// 		generated_keys.push(prekey);
+// 	}
+
+// 	return generated_keys;
+// }
+
 #[cfg(test)]
 mod tests {
-	use crate::{x448::KeyPairX448, ntru::KeyPairNtru, serializable::{Serializable, Deserializable}};
+	use crate::{x448::KeyPairX448, kyber::KeyPairKyber, serializable::{Serializable, Deserializable}};
 	use super::Prekey;
 
 	#[test]
 	fn test_serialize_deserialize() {
 		let pk = Prekey {
 			key_x448: KeyPairX448::generate(),
-			key_ntru: KeyPairNtru::generate(),
+			key_kyber: KeyPairKyber::generate(),
 			last_resort: true 
 		};
 		let serialized = pk.serialize();
-		let deserialized = Prekey::deserialize(&serialized).unwrap();
+		let deserialized = Prekey::deserialize(&serialized);
 
-		assert_eq!(pk, deserialized);
+		assert_eq!(Ok(pk), deserialized);
+	}
+
+	#[test]
+	fn generate_prekeys() {
+		// let prekeys = generate(Some(3));
+	
+		// assert_eq!(3, prekeys.len());
+	
+		// assert_eq!(false, prekeys.get(0).unwrap().last_resort);
+		// assert_eq!(false, prekeys.get(1).unwrap().last_resort);
+		// assert_eq!(true, prekeys.get(2).unwrap().last_resort);	
 	}
 }

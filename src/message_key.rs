@@ -204,9 +204,9 @@ mod serialize {
 		fn test_serialize_deserialize() {
 			let mk = MessageKey::from(&[42u8; MessageKey::SIZE]);
 			let serialized = mk.serialize();
-			let deserialized = MessageKey::deserialize(&serialized).unwrap();
+			let deserialized = MessageKey::deserialize(&serialized);
 
-			assert_eq!(mk, deserialized);
+			assert_eq!(Ok(mk), deserialized);
 		}
 	}
 }

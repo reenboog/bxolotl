@@ -1,5 +1,5 @@
 use std::{collections::HashMap, mem, rc::Rc, borrow::Borrow};
-use crate::{chain_key::{ChainKey}, message_key::MessageKey, x448::PublicKeyX448, ntru::KeyPairNtru};
+use crate::{chain_key::{ChainKey}, message_key::MessageKey, x448::PublicKeyX448, kyber::KeyPairKyber};
 
 pub const MAX_KEYS_TO_SKIP: u32 = 1000;
 
@@ -62,7 +62,7 @@ pub enum Error {
 pub struct Chain {
 	chain_key: Rc<ChainKey>,
 	ratchet_key: PublicKeyX448, // used for id only
-	ntru_ratchet_key: Option<KeyPairNtru>, // used for id only
+	kyber_ratchet_key: Option<KeyPairKyber>, // used for id only
 	skipped_keys: HashMap<u32, Rc<MessageKey>>,
 	next_counter: u32,
 	max_keys_to_skip: u32
@@ -73,7 +73,7 @@ impl Chain {
 		Self { 
 			chain_key: Rc::new(ck),
 			ratchet_key: rk, 
-			ntru_ratchet_key: None, 
+			kyber_ratchet_key: None, 
 			skipped_keys: HashMap::new(), 
 			next_counter: 0,
 			max_keys_to_skip: max_keys
@@ -95,12 +95,12 @@ impl Chain {
 	}
 
 	// used for id mostly
-	pub fn ntru_ratchet_key(&self) -> &Option<KeyPairNtru> {
-		&self.ntru_ratchet_key
+	pub fn kyber_ratchet_key(&self) -> &Option<KeyPairKyber> {
+		&self.kyber_ratchet_key
 	}
 
-	pub fn set_ntru_ratchet_key(&mut self, key: KeyPairNtru) {
-		self.ntru_ratchet_key = Some(key);
+	pub fn set_kyber_ratchet_key(&mut self, key: KeyPairKyber) {
+		self.kyber_ratchet_key = Some(key);
 	}
 
 	pub fn remove(&mut self, counter: u32) -> Option<Rc<MessageKey>> {
@@ -167,7 +167,7 @@ mod tests {
 
 		assert_eq!(chain.chain_key().key().as_bytes().to_owned(), CK);
 		assert_eq!(chain.ratchet_key().as_bytes().to_owned(), RK);
-		assert!(chain.ntru_ratchet_key.is_none());
+		assert!(chain.kyber_ratchet_key.is_none());
 		assert!(!chain.has_skipped_keys());
 		assert_eq!(chain.next_counter(), 0);
 	}
@@ -239,16 +239,16 @@ mod tests {
 mod serialize {
 	use std::{rc::Rc, collections::HashMap};
 	use prost::Message;
-	use crate::{proto, serializable::{Serializable, Deserializable}, message_key::MessageKey, chain_key::ChainKey, x448::PublicKeyX448, ntru::KeyPairNtru};
+	use crate::{proto, serializable::{Serializable, Deserializable}, message_key::MessageKey, chain_key::ChainKey, x448::PublicKeyX448, kyber::KeyPairKyber};
 	use super::{Chain, MAX_KEYS_TO_SKIP};
 
-	#[derive(Debug)]
+	#[derive(Debug, PartialEq)]
 	pub enum Error {
 		NoChainKey,
 		WrongChainKeyLen,
 		NoRatchetKey,
 		WrongRatchetKeyLen,
-		BadNtruKeyPair,
+		BadKyberKeyPair,
 		NoSkippedKeys,
 		BadFormat
 	}
@@ -269,7 +269,7 @@ mod serialize {
 				chain_key: Some(src.chain_key().as_ref().into()),
 				message_keys,
 				next_counter: Some(src.next_counter),
-				ratchet_ntru_key_pair: src.ntru_ratchet_key().as_ref().map(|k| k.serialize()) // TODO: concat instead of serialize?
+				ratchet_kyber_key_pair: src.kyber_ratchet_key().as_ref().map(|k| k.serialize()) // TODO: concat instead of serialize?
 			}
 		}
 	}
@@ -298,7 +298,7 @@ mod serialize {
 			Ok(Self {
 				chain_key: Rc::new(ChainKey::try_from(value.chain_key.ok_or(Error::NoChainKey)?).or(Err(Error::WrongChainKeyLen))?),
 				ratchet_key: PublicKeyX448::try_from(value.ratchet_key.ok_or(Error::NoRatchetKey)?).or(Err(Error::WrongRatchetKeyLen))?,
-				ntru_ratchet_key: value.ratchet_ntru_key_pair.map_or(Ok(None), |kp| Ok(Some(KeyPairNtru::deserialize(&kp).or(Err(Error::BadNtruKeyPair))?)))?,
+				kyber_ratchet_key: value.ratchet_kyber_key_pair.map_or(Ok(None), |kp| Ok(Some(KeyPairKyber::deserialize(&kp).or(Err(Error::BadKyberKeyPair))?)))?,
 				skipped_keys,
 				next_counter: value.next_counter.unwrap_or(0),
 				max_keys_to_skip: MAX_KEYS_TO_SKIP // doesn't need to be persisted
@@ -319,14 +319,14 @@ mod serialize {
     use crate::{chain::{Chain, MAX_KEYS_TO_SKIP}, x448::KeyPairX448, chain_key::ChainKey, hmac, serializable::{Serializable, Deserializable}};
 
 		#[test]
-		fn serialize_deserialize() {
+		fn test_serialize_deserialize() {
 			let kp = KeyPairX448::generate();
 			let ck = ChainKey::new(hmac::Key::new([123u8; hmac::Key::SIZE]), 117);
 			let ch = Chain::new(kp.public_key().to_owned(), ck, MAX_KEYS_TO_SKIP);
 			let serialized = ch.serialize();
-			let deserialized = Chain::deserialize(&serialized).unwrap();
+			let deserialized = Chain::deserialize(&serialized);
 
-			assert_eq!(deserialized, ch);
+			assert_eq!(Ok(ch), deserialized);
 		}
 	}
 }

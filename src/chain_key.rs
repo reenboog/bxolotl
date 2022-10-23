@@ -123,10 +123,9 @@ mod tests {
 	#[test]
 	fn test_serialize_deserialize() {
 		let ck = ChainKey::new(Key::new([19u8; Key::SIZE]), 1984);
-		let deserialized = ChainKey::deserialize(&ck.serialize()).unwrap();
+		let deserialized = ChainKey::deserialize(&ck.serialize());
 
-		assert_eq!(deserialized.counter, ck.counter);
-		assert_eq!(deserialized.key, ck.key);
+		assert_eq!(Ok(ck), deserialized);
 	}
 
 	#[test]
