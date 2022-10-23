@@ -77,21 +77,80 @@ impl PrivateKeyKyber {
 	}
 }
 
+/// Encrypts KeyBundle, so that bundle.x448.id = envelope.key_id
+/// The hierarchy goes as follows:
+/// EncryptedEnvelope {
+/// 	Encrypted {
+/// 		KeyBundle | Encrypted
+/// 	}
+/// }
+/// Corresponds to proto::KyberEncryptedEphemeralKey
 #[derive(Clone, Debug, PartialEq)]
-pub struct KyberEncrypted {
-	/// id of the public key used to encapsulate-encrypt `payload`
+pub struct EncryptedEnvelope {
+	/// id of the encrypted x448 key of payload.payload
+	pub key_id: u64,
+	/// if yes, payload.payload is KyberEncrypted
+	pub double_encrypted: bool,
+	/// contains either KyberedKeys or another KyberEncrypted, if `double_encrypted` is true
+	pub payload: Encrypted
+}
+
+impl From<&EncryptedEnvelope> for proto::KyberEncryptedEphemeralKey {
+	fn from(src: &EncryptedEnvelope) -> Self {
+		Self {
+			ephemeral_key_id: src.key_id,
+			double_encrypted: src.double_encrypted,
+			kyber_encrypted: proto::KyberEncrypted::from(&src.payload)
+		}
+	}
+}
+
+impl Serializable for EncryptedEnvelope {
+	fn serialize(&self) -> Vec<u8> {
+		proto::KyberEncryptedEphemeralKey::from(self).encode_to_vec()
+	}
+}
+
+impl TryFrom<proto::KyberEncryptedEphemeralKey> for EncryptedEnvelope {
+	type Error = Error;
+
+	fn try_from(value: proto::KyberEncryptedEphemeralKey) -> Result<Self, Self::Error> {
+		Ok(Self {
+			key_id: value.ephemeral_key_id,
+			double_encrypted: value.double_encrypted,
+			payload: Encrypted::try_from(value.kyber_encrypted)?
+		})
+	}
+}
+
+impl Deserializable for EncryptedEnvelope {
+	type Error = Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
+		Self::try_from(proto::KyberEncryptedEphemeralKey::decode(buf).or(Err(Error::BadKyberEncryptedKeyFormat))?)
+	}
+}
+
+/// Anything encrypted with a kyber key (specified by `encryption_key_id`). To be precise, it's aes-encrypted, where
+/// key = kyber_pub.encapsulate().secret, iv = gen_random()
+/// In general, used to encrypt KeyBundle, either once (with a prekey), eg when it's time to kyber-encrypt
+/// the next ratchet or twice: enc(identity, enc(prekey, data)) during the initial key exchange (the only scenario for double encryption)
+/// Corresponds to proto::KyberEncrypted
+#[derive(Clone, Debug, PartialEq)]
+pub struct Encrypted {
+	/// id of the public kyber key used to encapsulate-encrypt `payload`
 	pub encryption_key_id: u64,
 	/// output of Kyber::encapsulate
 	// TODO: introduce Ciphertext & SharedSecret instead of Vec
 	pub ciphertext: Vec<u8>, 
 	/// used to aes-encrypt/decrypt `payload` in encrypt/decrypt_sealed
 	pub iv: Iv,
-	/// decrypts either to KyberEncrypted or to straight to KyberedKeys
+	/// decrypts either to Encrypted or to straight to KeyBundle
 	pub payload: Vec<u8>
 }
 
-impl From<&KyberEncrypted> for proto::KyberEncrypted {
-	fn from(src: &KyberEncrypted) -> Self {
+impl From<&Encrypted> for proto::KyberEncrypted {
+	fn from(src: &Encrypted) -> Self {
 		Self {
 			encapsulation_key_id: src.encryption_key_id,
 			ciphertext: src.ciphertext.clone(),
@@ -101,13 +160,13 @@ impl From<&KyberEncrypted> for proto::KyberEncrypted {
 	}
 }
 
-impl Serializable for KyberEncrypted {
+impl Serializable for Encrypted {
 	fn serialize(&self) -> Vec<u8> {
 		proto::KyberEncrypted::from(self).encode_to_vec()
 	}
 }
 
-impl TryFrom<proto::KyberEncrypted> for KyberEncrypted {
+impl TryFrom<proto::KyberEncrypted> for Encrypted {
 	type Error = Error;
 
 	fn try_from(value: proto::KyberEncrypted) -> Result<Self, Self::Error> {
@@ -120,7 +179,7 @@ impl TryFrom<proto::KyberEncrypted> for KyberEncrypted {
 	}
 }
 
-impl Deserializable for KyberEncrypted {
+impl Deserializable for Encrypted {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
@@ -130,13 +189,13 @@ impl Deserializable for KyberEncrypted {
 
 // decrypted KyberEncrypted proto object (to be renamed): x448 + kyber ratches
 #[derive(Debug, PartialEq)]
-pub struct KyberedKeys {
+pub struct KeyBundle {
 	pub ephemeral: PublicKeyX448,
 	pub kyber: PublicKeyKyber
 }
 
-impl From<&KyberedKeys> for proto::KyberX448KeyPair {
-	fn from(value: &KyberedKeys) -> Self {
+impl From<&KeyBundle> for proto::KyberX448KeyPair {
+	fn from(value: &KeyBundle) -> Self {
 		Self {
 			ephemeral_key: value.ephemeral.as_bytes().to_vec(),
 			kyber_key: value.kyber.as_bytes().to_vec()
@@ -144,13 +203,13 @@ impl From<&KyberedKeys> for proto::KyberX448KeyPair {
 	}
 }
 
-impl Serializable for KyberedKeys {
+impl Serializable for KeyBundle {
 	fn serialize(&self) -> Vec<u8> {
 		proto::KyberX448KeyPair::from(self).encode_to_vec()
 	}
 }
 
-impl TryFrom<proto::KyberX448KeyPair> for KyberedKeys {
+impl TryFrom<proto::KyberX448KeyPair> for KeyBundle {
 	type Error = Error;
 
 	fn try_from(value: proto::KyberX448KeyPair) -> Result<Self, Self::Error> {
@@ -161,62 +220,11 @@ impl TryFrom<proto::KyberX448KeyPair> for KyberedKeys {
 	}
 }
 
-impl Deserializable for KyberedKeys {
+impl Deserializable for KeyBundle {
 	type Error = Error;
 
 	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
 		Self::try_from(proto::KyberX448KeyPair::decode(buf).or(Err(Error::BadKyberedKeysFormat))?)
-	}
-}
-
-/// KyberEncryptedEnvelope {
-/// 	KyberEncrypted {
-/// 		KyberedKeys | KyberEncrypted
-/// 	}
-/// }
-#[derive(Clone, Debug, PartialEq)]
-pub struct KyberEncryptedEnvelope {
-	/// id of the encrypted key
-	pub key_id: u64,
-	/// if yes, payload.payload is KyberEncrypted
-	pub double_encrypted: bool,
-	/// contains either KyberedKeys or another KyberEncrypted, if `double_encrypted` is true
-	pub payload: KyberEncrypted
-}
-
-impl From<&KyberEncryptedEnvelope> for proto::KyberEncryptedEphemeralKey {
-	fn from(src: &KyberEncryptedEnvelope) -> Self {
-		Self {
-			ephemeral_key_id: src.key_id,
-			double_encrypted: src.double_encrypted,
-			kyber_encrypted: proto::KyberEncrypted::from(&src.payload)
-		}
-	}
-}
-
-impl Serializable for KyberEncryptedEnvelope {
-	fn serialize(&self) -> Vec<u8> {
-		proto::KyberEncryptedEphemeralKey::from(self).encode_to_vec()
-	}
-}
-
-impl TryFrom<proto::KyberEncryptedEphemeralKey> for KyberEncryptedEnvelope {
-	type Error = Error;
-
-	fn try_from(value: proto::KyberEncryptedEphemeralKey) -> Result<Self, Self::Error> {
-		Ok(Self {
-			key_id: value.ephemeral_key_id,
-			double_encrypted: value.double_encrypted,
-			payload: KyberEncrypted::try_from(value.kyber_encrypted)?
-		})
-	}
-}
-
-impl Deserializable for KyberEncryptedEnvelope {
-	type Error = Error;
-
-	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Self::try_from(proto::KyberEncryptedEphemeralKey::decode(buf).or(Err(Error::BadKyberEncryptedKeyFormat))?)
 	}
 }
 
@@ -242,7 +250,7 @@ impl<'a> EncryptionMode<'a>
 	}
 }
 
-pub fn encrypt_sealed(plain: &[u8], pk: &PublicKeyKyber) -> KyberEncrypted {
+pub fn encrypt_sealed(plain: &[u8], pk: &PublicKeyKyber) -> Encrypted {
 	use crate::aes_cbc::{Key};
 	use pqcrypto_traits::kem::{SharedSecret, Ciphertext};
 
@@ -254,7 +262,7 @@ pub fn encrypt_sealed(plain: &[u8], pk: &PublicKeyKyber) -> KyberEncrypted {
 	let aes = AesCbc::new(key, iv);
 	let payload = aes.encrypt(plain);
 
-	KyberEncrypted {
+	Encrypted {
 		encryption_key_id: pk.id(),
 		ciphertext: ciphertext.as_bytes().to_vec(),
 		iv,
@@ -262,7 +270,7 @@ pub fn encrypt_sealed(plain: &[u8], pk: &PublicKeyKyber) -> KyberEncrypted {
 	}
 }
 
-pub fn decrypt_sealed(msg: &KyberEncrypted, sk: &PrivateKeyKyber) -> Result<Vec<u8>, Error> {
+pub fn decrypt_sealed(msg: &Encrypted, sk: &PrivateKeyKyber) -> Result<Vec<u8>, Error> {
 	use crate::aes_cbc::{Key};
 	use pqcrypto_traits::kem::SharedSecret;
 
@@ -280,15 +288,15 @@ pub fn decrypt_sealed(msg: &KyberEncrypted, sk: &PrivateKeyKyber) -> Result<Vec<
 /// double encryption is now done only for initial key exchange
 pub fn encrypt_keys(eph: &PublicKeyX448,
 	kyber: &PublicKeyKyber,
-	mode: EncryptionMode) -> KyberEncryptedEnvelope {
-	let serialized_kybered = KyberedKeys {
+	mode: EncryptionMode) -> EncryptedEnvelope {
+	let serialized_kybered = KeyBundle {
 		ephemeral: eph.clone(),
 		kyber: kyber.clone()
 	}.serialize();
 
 	use EncryptionMode::{Once, Double};
 
-	KyberEncryptedEnvelope {
+	EncryptedEnvelope {
 		key_id: eph.id(),
 		double_encrypted: mode.is_double(),
 		payload: match mode {
@@ -298,19 +306,19 @@ pub fn encrypt_keys(eph: &PublicKeyX448,
 	}
 }
 
-pub fn decrypt_keys<'a, F>(eph: &KyberEncryptedEnvelope, mode: DecryptionMode<'a, F>) -> Result<KyberedKeys, Error>
+pub fn decrypt_keys<'a, F>(eph: &EncryptedEnvelope, mode: DecryptionMode<'a, F>) -> Result<KeyBundle, Error>
 where
 	F: Fn(u64) -> Result<&'a PrivateKeyKyber, Error> + ?Sized
 {
 	use DecryptionMode::{Once, Double};
 
 	match mode {
-    Once { key } => KyberedKeys::deserialize(&decrypt_sealed(&eph.payload, key)?),
+    Once { key } => KeyBundle::deserialize(&decrypt_sealed(&eph.payload, key)?),
     Double { second_key, first_key } => {
-			let encrypted = KyberEncrypted::deserialize(&decrypt_sealed(&eph.payload, second_key)?)?;
+			let encrypted = Encrypted::deserialize(&decrypt_sealed(&eph.payload, second_key)?)?;
 			let key = first_key(encrypted.encryption_key_id)?;
 
-			KyberedKeys::deserialize(&decrypt_sealed(&encrypted, key)?)
+			KeyBundle::deserialize(&decrypt_sealed(&encrypted, key)?)
 		} 
 	}
 }
@@ -319,41 +327,41 @@ where
 mod tests {
 	use pqcrypto_traits::kem::{Ciphertext, SharedSecret};
 	use crate::{x448::KeyPairX448, serializable::{Serializable, Deserializable}, aes_cbc::Iv};
-	use super::{KeyTypeKyber, PrivateKeyKyber, KeyPairKyber, Error, encrypt_sealed, decrypt_sealed, encrypt_keys, decrypt_keys, KeySource, EncryptionMode, DecryptionMode, KyberedKeys, KyberEncrypted, KyberEncryptedEnvelope};
+	use super::{KeyTypeKyber, PrivateKeyKyber, KeyPairKyber, Error, encrypt_sealed, decrypt_sealed, encrypt_keys, decrypt_keys, KeySource, EncryptionMode, DecryptionMode, KeyBundle, Encrypted, EncryptedEnvelope};
 	use crate::key_pair::KeyPairSize;
 
 	#[test]
 	fn test_serialize_deserialize_kybered_keys() {
-		let kybered = KyberedKeys {
+		let kybered = KeyBundle {
 			ephemeral: KeyPairX448::generate().public_key().to_owned(),
 			kyber: KeyPairKyber::generate().public_key().to_owned()
 		};
 		let serialized = kybered.serialize();
-		let deserialized = KyberedKeys::deserialize(&serialized);
+		let deserialized = KeyBundle::deserialize(&serialized);
 
 		assert_eq!(Ok(kybered), deserialized);
 	}
 
 	#[test]
 	fn test_serialize_deserialize_kyber_encrypted() {
-		let ke = KyberEncrypted {
+		let ke = Encrypted {
 			encryption_key_id: 42,
 			ciphertext: b"oh, my".to_vec(),
 			iv: Iv([7u8; Iv::SIZE]),
 			payload: b"no payment or loading required".to_vec() 
 		};
 		let serialized = ke.serialize();
-		let deserialized = KyberEncrypted::deserialize(&serialized);
+		let deserialized = Encrypted::deserialize(&serialized);
 
 		assert_eq!(Ok(ke), deserialized);
 	}
 
 	#[test]
 	fn test_serialize_deserialize_kyber_encrypted_envelope() {
-		let env = KyberEncryptedEnvelope {
+		let env = EncryptedEnvelope {
 			key_id: 42,
 			double_encrypted: true,
-			payload: KyberEncrypted {
+			payload: Encrypted {
 				encryption_key_id: 42,
 				ciphertext: b"oh, my".to_vec(),
 				iv: Iv([7u8; Iv::SIZE]),
@@ -361,7 +369,7 @@ mod tests {
 			} 
 		};
 		let serialized = env.serialize();
-		let deserialized = KyberEncryptedEnvelope::deserialize(&serialized);
+		let deserialized = EncryptedEnvelope::deserialize(&serialized);
 		
 		assert_eq!(Ok(env), deserialized);
 	}

@@ -1,4 +1,4 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::SignedPublicKeyX448, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, kyber::{self, KyberEncryptedEnvelope, KyberedKeys, KeyPairKyber, PublicKeyKyber, PrivateKeyKyber}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, id, mac::AxolotlMac, serializable::{Serializable, Deserializable}};
+use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::SignedPublicKeyX448, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, kyber::{self, EncryptedEnvelope, KeyBundle, KeyPairKyber, PublicKeyKyber, PrivateKeyKyber}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, mac::AxolotlMac};
 
 pub const RATCHETS_BETWEEN_KYBER: u32 = 20;
 
@@ -238,7 +238,7 @@ impl Session {
 		mac
 	}
 
-	fn decrypt_kyber_encrypted_ratchet(&self, eph: &KyberEncryptedEnvelope) -> Result<KyberedKeys, Error> {
+	fn decrypt_kyber_encrypted_ratchet(&self, eph: &EncryptedEnvelope) -> Result<KeyBundle, Error> {
 		use kyber::DecryptionMode::{Once, Double};
 
 		let find_key = |id| -> Result<&PrivateKeyKyber, kyber::Error> {
@@ -302,7 +302,7 @@ impl Session {
 		let purported_kyber_ratchet: PublicKeyKyber; // TODO: can I get rid of this?
 
 		if let Some(kyber_encrypted_ratchet) = msg.kyber_encrypted_ratchet_key() {
-			let KyberedKeys { ephemeral, kyber } = self.decrypt_kyber_encrypted_ratchet(kyber_encrypted_ratchet)?;
+			let KeyBundle { ephemeral, kyber } = self.decrypt_kyber_encrypted_ratchet(kyber_encrypted_ratchet)?;
 
 			purported_ratchet = ephemeral;
 			purported_kyber_ratchet = kyber;
@@ -353,7 +353,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{KeyPairX448}, ed448::KeyPairEd448, kyber::{KeyPairKyber, PrivateKeyKyber, KyberedKeys, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_KYBER, chain, hmac};
+	use crate::{x448::{KeyPairX448}, ed448::KeyPairEd448, kyber::{KeyPairKyber, PrivateKeyKyber, KeyBundle, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_KYBER, chain, hmac};
 	use super::{Session, AxolotlMac, Error};
 
 	fn alice_x448_identity() -> KeyPairX448 {
@@ -462,7 +462,7 @@ mod tests {
 			decrypted.kyber.clone())
 	}
 
-	fn decrypt_kex(kex: &KeyExchange) -> KyberedKeys {
+	fn decrypt_kex(kex: &KeyExchange) -> KeyBundle {
 		let bob_kyber_prekey = bob_kyber_prekey();
 
 		let find_key = |_| -> Result<&PrivateKeyKyber, kyber::Error> {

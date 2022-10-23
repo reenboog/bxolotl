@@ -2,7 +2,7 @@ use std::{sync::Arc, fmt::Display};
 
 use async_trait::async_trait;
 use prost::encoding::bool;
-use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KyberedKeys, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
+use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KeyBundle, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
 
 /*
 
@@ -140,7 +140,7 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 				let find_key = |_| -> Result<&PrivateKeyKyber, kyber::Error> {
 					Ok(key_kyber.private_key())
 				};
-				let KyberedKeys { ephemeral: their_key_x448, kyber: their_key_kyber } = kyber::decrypt_keys(
+				let KeyBundle { ephemeral: their_key_x448, kyber: their_key_kyber } = kyber::decrypt_keys(
 					&kex.kyber_encrypted_ephemeral,
 					Double { second_key: kyber_identity.private_key(), first_key: Box::new(find_key) }).or(Err(Error::BadKyberEncryptedEphemeral))?;
 				let their_identity = kex.x448_identity.clone(); 

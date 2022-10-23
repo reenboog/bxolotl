@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use crate::{key_exchange::KeyExchange, kyber::KyberEncryptedEnvelope, x448::PublicKeyX448, serializable::{Serializable, Deserializable}, proto};
+use crate::{key_exchange::KeyExchange, kyber::EncryptedEnvelope, x448::PublicKeyX448, serializable::{Serializable, Deserializable}, proto};
 
 // MessageType
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -43,7 +43,7 @@ pub struct Message {
 	pub prev_counter: u32,
 	// TODO: introduce RatchetMode { raw, kyber_encrypted }?
 	pub ratchet_key: Option<PublicKeyX448>,
-	pub kyber_encrypted_ratchet_key: Option<KyberEncryptedEnvelope>,
+	pub kyber_encrypted_ratchet_key: Option<EncryptedEnvelope>,
 	pub ciphertext: Vec<u8>,
 	pub key_exchange: Option<KeyExchange>,
 	pub _type: Type,
@@ -91,12 +91,12 @@ impl TryFrom<proto::CryptoMessage> for Message {
 	fn try_from(msg: proto::CryptoMessage) -> Result<Self, Self::Error> {
 		// either ratchet or kyber_encrypted_ratchet
 		let mut ratchet_key: Option<PublicKeyX448> = None;
-		let mut kyber_encrypted_ratchet_key: Option<KyberEncryptedEnvelope> = None;
+		let mut kyber_encrypted_ratchet_key: Option<EncryptedEnvelope> = None;
 
 		if let Some(key) = msg.ephemeral_key {
 			ratchet_key = Some(PublicKeyX448::try_from(key).or(Err(Error::BadEphemeralKeyFormat))?);
 		} else if let Some(key) = msg.kyber_encrypted_ephemeral_key {
-			kyber_encrypted_ratchet_key = Some(KyberEncryptedEnvelope::try_from(key).or(Err(Error::BadKyberEncryptedKeyFormat))?);
+			kyber_encrypted_ratchet_key = Some(EncryptedEnvelope::try_from(key).or(Err(Error::BadKyberEncryptedKeyFormat))?);
 		} else {
 			return Err(Error::NoRatchetKeySupplied)
 		}
@@ -134,11 +134,11 @@ impl Message {
 	}
 
 	// TODO: combine with set_ratchet via an enum?
-	pub fn set_kyber_encrypted_ratchet_key(&mut self, key: KyberEncryptedEnvelope) {
+	pub fn set_kyber_encrypted_ratchet_key(&mut self, key: EncryptedEnvelope) {
 		self.kyber_encrypted_ratchet_key = Some(key);
 	}
 
-	pub fn kyber_encrypted_ratchet_key(&self) -> Option<&KyberEncryptedEnvelope> {
+	pub fn kyber_encrypted_ratchet_key(&self) -> Option<&EncryptedEnvelope> {
 		self.kyber_encrypted_ratchet_key.borrow().as_ref()
 	}
 
