@@ -1,8 +1,8 @@
-use crate::{ed448::{Signature, PublicKeyEd448}, x448::PublicKeyX448};
+use crate::{ed448::{Signature, PublicKeyEd448}, x448::{PublicKeyX448, KeyTypeX448}, key_pair::KeyPairSize};
 
 // TODO: make more generic?,ie any public key signed with any signing key?
 // Represents any public key signed by en Ed448Key
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SignedPublicKey {
 	key: PublicKeyX448,
 	signature: Signature
@@ -25,6 +25,17 @@ impl SignedPublicKey {
 impl SignedPublicKey {
 	pub fn verify(&self, signing_key_pub: &PublicKeyEd448) -> bool {
 		signing_key_pub.verify(self.key.as_bytes(), &self.signature)
+	}
+}
+
+impl TryFrom<Vec<u8>> for SignedPublicKey {
+	type Error = std::array::TryFromSliceError;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		let key = PublicKeyX448::new(value[..KeyTypeX448::PUB].try_into()?);
+		let signature = Signature::new(value[KeyTypeX448::PUB..].try_into()?);
+
+		Ok(Self::new(key, signature))
 	}
 }
 
@@ -53,5 +64,16 @@ mod tests {
 		let signed_public = SignedPublicKeyX448::new(public, signature);
 
 		assert!(!signed_public.verify(&KeyPairEd448::generate().public_key()));
+	}
+
+	#[test]
+	fn test_try_from_vec() {
+		let signing_keypair = KeyPairEd448::generate();
+		let public = KeyPairX448::generate().public_key().to_owned();
+		let signature = signing_keypair.private_key().sign(public.as_bytes());
+		let signed = SignedPublicKeyX448::new(public, signature.clone());
+		let bytes = [&signed.key().as_bytes()[..], &signature.as_bytes()[..]].map(|s| s.to_vec()).concat();
+
+		assert_eq!(SignedPublicKeyX448::try_from(bytes).unwrap(), signed);
 	}
 }

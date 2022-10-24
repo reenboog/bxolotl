@@ -16,18 +16,13 @@ pub mod signed_key_pair;
 pub mod key_exchange;
 pub mod chain;
 pub mod ed448;
-pub mod ntru;
+pub mod kyber;
 pub mod serializable;
 pub mod x448;
 pub mod master_key;
 pub mod message_key;
 pub mod proto;
 pub mod id;
-
-#[cfg(test)]
-mod tests {
-	#[test]
-	fn test_it() {
-
-	}
-}
+pub mod mac;
+pub mod cryptor;
+pub mod identity_keys;

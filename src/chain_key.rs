@@ -4,6 +4,7 @@ use crate::serializable::{Serializable, Deserializable};
 use crate::{hmac, proto};
 use prost::Message;
 
+#[derive(Debug, PartialEq)]
 pub struct ChainKey {
 	key: hmac::Key,
 	counter: u32
@@ -116,16 +117,15 @@ mod tests {
 		let next1 = ck1.next();
 
 		assert_eq!(next0.counter, next1.counter);
-		assert_ne!(next0.key.as_bytes(), next1.key.as_bytes());
+		assert_ne!(next0.key, next1.key);
 	}
 
 	#[test]
 	fn test_serialize_deserialize() {
 		let ck = ChainKey::new(Key::new([19u8; Key::SIZE]), 1984);
-		let deserialized = ChainKey::deserialize(&ck.serialize()).unwrap();
+		let deserialized = ChainKey::deserialize(&ck.serialize());
 
-		assert_eq!(deserialized.counter, ck.counter);
-		assert_eq!(deserialized.key.as_bytes(), ck.key.as_bytes());
+		assert_eq!(Ok(ck), deserialized);
 	}
 
 	#[test]

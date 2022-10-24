@@ -154,8 +154,8 @@ mod tests {
 			&bob_signed_prekey(),
 			&bob_prekey_x448_pub());
 
-		assert_eq!(key.root_key().as_bytes(), expected_root().as_bytes());
-		assert_eq!(key.chain_key().key().as_bytes(), expected_chain().key().as_bytes());
+		assert_eq!(key.root_key(), &expected_root());
+		assert_eq!(key.chain_key().key(), expected_chain().key());
 		assert_eq!(key.chain_key().counter(), 0);
 	}
 
@@ -168,8 +168,8 @@ mod tests {
 		 &alice_identity_x448_pub(), 
 		 &alice_ephemeral_x448_pub());
 
-		assert_eq!(key.root_key().as_bytes(), expected_root().as_bytes());
-		assert_eq!(key.chain_key().key().as_bytes(), expected_chain().key().as_bytes());
+		assert_eq!(key.root_key(), &expected_root());
+		assert_eq!(key.chain_key().key(), expected_chain().key());
 		assert_eq!(key.chain_key().counter(), 0);
 	}
 

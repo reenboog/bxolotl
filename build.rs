@@ -3,7 +3,8 @@ use std::io::Result as IOResult;
 fn main() -> IOResult<()> {
     let text_push_protobuf_files = [
         "protobuf/proto/ciphrtext/Cipher.proto",
-        "protobuf/proto/ciphrtext/Session.proto"
+        "protobuf/proto/ciphrtext/Session.proto",
+        "protobuf/proto/common/Storage.proto"
     ];
     let text_push_protobuf_includes = [
         "protobuf/proto/ciphrtext",

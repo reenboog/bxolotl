@@ -1,6 +1,12 @@
-use crate::{signed_public_key::{SignedPublicKeyX448}, x448::PrivateKeyX448};
+use prost::Message;
+use crate::{signed_public_key::{SignedPublicKeyX448}, x448::{PrivateKeyX448, KeyPairX448}, proto, ed448::Signature, serializable::Deserializable};
 
-// TODO: make generic (aggregate KeyPair?)
+#[derive(Debug)]
+pub enum Error {
+	BadSignature,
+	BadKey,
+	BadFormat
+}
 // Represents any key pair signed by an Ed448 key
 pub struct SignedKeyPair {
 	private: PrivateKeyX448,
@@ -18,6 +24,28 @@ impl SignedKeyPair {
 
 	pub fn public(&self) -> &SignedPublicKeyX448 {
 		&self.public
+	}
+}
+
+impl TryFrom<proto::SignedKeyPair> for SignedKeyPairX448 {
+	type Error = Error;
+
+	fn try_from(value: proto::SignedKeyPair) -> Result<Self, Self::Error> {
+		let signature = Signature::try_from(value.signature).or(Err(Error::BadSignature))?;
+		let kp = KeyPairX448::try_from(value.key_pair).or(Err(Error::BadKey))?;
+
+		Ok(Self {
+			private: kp.private_key().clone(),
+			public: SignedPublicKeyX448::new(kp.public_key().clone(), signature) 
+		})
+	}
+}
+
+impl Deserializable for SignedKeyPairX448 {
+	type Error = Error;
+
+	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+		Self::try_from(proto::SignedKeyPair::decode(buf).or(Err(Error::BadFormat))?)
 	}
 }
 

@@ -1,6 +1,7 @@
 use std::{collections::VecDeque};
-use crate::{chain::Chain, x448::PublicKeyX448, ntru::KeyPairNtru};
+use crate::{chain::Chain, x448::PublicKeyX448, kyber::KeyPairKyber, proto};
 
+#[derive(Debug, PartialEq)]
 pub struct ReceiveChain {
 	chains: VecDeque<Chain>
 }
@@ -62,8 +63,32 @@ impl ReceiveChain {
 		self.chains.iter_mut().find(|c| c.ratchet_key().id() == ratchet.id())
 	}
 
-	pub fn ntru_key_pair(&self, id: u64) -> Option<&KeyPairNtru> {
-		self.chains.iter().flat_map(|c| c.ntru_ratchet_key()).find(|pk| pk.public_key().id() == id)
+	pub fn kyber_key_pair(&self, id: u64) -> Option<&KeyPairKyber> {
+		self.chains.iter().flat_map(|c| c.kyber_ratchet_key()).find(|pk| pk.public_key().id() == id)
+	}
+}
+
+impl From<&ReceiveChain> for Vec<proto::session_state::Chain> {
+	fn from(src: &ReceiveChain) -> Self {
+		src.chains.iter().map(|c| c.into()).collect::<Vec<proto::session_state::Chain>>()
+	}
+}
+
+#[derive(Debug)]
+pub enum Error {
+	BadChain
+}
+
+impl TryFrom<Vec<proto::session_state::Chain>> for ReceiveChain {
+	type Error = Error;
+
+	fn try_from(value: Vec<proto::session_state::Chain>) -> Result<Self, Self::Error> {
+		Ok(Self {
+			chains: value
+				.into_iter()
+				.map(|c| Chain::try_from(c).or(Err(Error::BadChain)))
+				.collect::<Result<VecDeque<Chain>, Error>>()?
+		})
 	}
 }
 
@@ -85,7 +110,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_get_ntru_key_pair() {
+	fn test_get_kyber_key_pair() {
 		// todo!()
 	}
 }

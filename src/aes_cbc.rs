@@ -1,12 +1,10 @@
 use aes::cipher::{block_padding::{Pkcs7, UnpadError}, BlockEncryptMut, BlockDecryptMut, KeyIvInit};
-use prost::Message;
 use rand::Rng;
-use crate::{proto, serializable::{Serializable, Deserializable}};
 
 type Encryptor = cbc::Encryptor<aes::Aes256>;
 type Decryptor = cbc::Decryptor<aes::Aes256>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Key(pub [u8; Self::SIZE]);
 
 impl Key {
@@ -15,9 +13,13 @@ impl Key {
 	pub fn generate() -> Self {
 		Self(rand::thread_rng().gen())
 	}
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
+	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Iv(pub [u8; Self::SIZE]);
 
 impl Iv {
@@ -25,6 +27,10 @@ impl Iv {
 
 	pub fn generate() -> Self {
 		Self(rand::thread_rng().gen())
+	}
+
+	pub fn as_bytes(&self) -> &[u8; Self::SIZE] {
+		&self.0
 	}
 }
 
@@ -35,7 +41,6 @@ pub struct AesCbc {
 
 #[derive(Debug)]
 pub enum Error {
-	BadAesParamsFormat,
 	UnpaddingFailed,
 	WrongKeyLen,
 	WrongIvLen
@@ -62,16 +67,6 @@ impl AesCbc {
 }
 
 // TODO: test
-impl From<&AesCbc> for proto::AesParams {
-	fn from(src: &AesCbc) -> Self {
-		Self {
-			aes_key: src.key.0.to_vec(),
-			iv: src.iv.0.to_vec()
-		}
-	}
-}
-
-// TODO: test
 impl TryFrom<Vec<u8>> for Key {
 	type Error = Error;
 
@@ -89,32 +84,6 @@ impl TryFrom<Vec<u8>> for Iv {
 	fn try_from(buf: Vec<u8>) -> Result<Iv, Self::Error> {
 		Ok(Self(TryInto::<[u8; Self::SIZE]>::try_into(buf.as_slice()).or(Err(Error::WrongIvLen))?))
 	}
-}
-
-// TODO: test
-impl Serializable for AesCbc {
-	fn serialize(&self) -> Vec<u8> {
-		proto::AesParams::from(self).encode_to_vec()
-	}
-}
-
-impl TryFrom<proto::AesParams> for AesCbc {
-	type Error = Error;
-
-	fn try_from(value: proto::AesParams) -> Result<Self, Self::Error> {
-		let key = Key::try_from(value.aes_key)?;
-		let iv = Iv::try_from(value.iv)?;
-
-		Ok(Self::new(key, iv))
-	}
-}
-
-impl Deserializable for AesCbc {
-	type Error = Error;
-
-	fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> {
-		Self::try_from(proto::AesParams::decode(buf).or(Err(Error::BadAesParamsFormat))?)
-  }
 }
 
 #[cfg(test)]

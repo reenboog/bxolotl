@@ -20,8 +20,9 @@ rand-07 = { package = "rand", version = "0.7.0" }
 sha2 = { version = "0.10" }
 hmac = { version = "0.12.1" }
 
-# ntru
-ntrust = { git = "ssh://git@git.onyxcorp.net/ccf/ntrust.git", branch = "master" }
+# kyber
+pqcrypto-traits = { version = "0.3"}
+pqcrypto-kyber = { version = "0.7"}
 
 #448 ec
 x448 = { version = "0.6" }
@@ -31,6 +32,11 @@ ed448-rust = { git = "https://github.com/reenboog/ed448-rust", branch = "master"
 cipher = { version = "0.4.2", features = ["block-padding", "alloc"] }
 aes = { version = "0.8.1" }
 cbc = { version = "0.1.2" }
+
+# async environment
+# TODO: move to ccl-rust
+tokio = { version = "1", features = ["full"] }
+async-trait = { version = "0.1" }
 
 [dev-dependencies]
 hex = { version = "0.4.3" }

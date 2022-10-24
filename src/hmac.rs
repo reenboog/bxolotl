@@ -4,6 +4,7 @@ use hmac::{Hmac, Mac};
 type HmacSha256 = Hmac<Sha256>;
 
 // TODO: introduce a more generic Key? size?
+#[derive(PartialEq, Debug)]
 pub struct Key([u8; Self::SIZE]);
 
 impl Key {
@@ -18,7 +19,7 @@ impl Key {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Digest(pub [u8; Self::SIZE]);
 
 impl Digest {
@@ -44,6 +45,16 @@ impl From<&[u8; Key::SIZE]> for Key {
 impl From<&[u8; Digest::SIZE]> for Digest {
 	fn from(slice: &[u8; Digest::SIZE]) -> Self {
 		Self(*slice)
+	}
+}
+
+impl TryFrom<Vec<u8>> for Digest {
+	type Error = std::array::TryFromSliceError;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		let slice: [u8; Self::SIZE] = value.as_slice().try_into()?;
+
+		Ok(Self(slice))
 	}
 }
 

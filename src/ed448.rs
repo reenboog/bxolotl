@@ -1,6 +1,11 @@
 use crate::{key_pair::{KeyPairSize, KeyPair}, private_key::PrivateKey, public_key::PublicKey};
 
-#[derive(Clone)]
+#[derive(Debug)]
+pub enum Error {
+	WrongLen
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Signature {
 	bytes: [u8; Self::SIZE]
 }
@@ -17,6 +22,15 @@ impl Signature {
 	}
 }
 
+impl TryFrom<Vec<u8>> for Signature {
+	type Error = Error;
+
+	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+		Ok(Self::new(value.try_into().or(Err(Error::WrongLen))?))
+	}
+}
+
+#[derive(Debug, PartialEq)]
 pub struct KeyTypeEd448;
 
 impl KeyPairSize for KeyTypeEd448 {
@@ -101,7 +115,7 @@ mod tests {
 		let pk = KeyPairEd448::generate();
 		let public = PublicKeyEd448::from_private(pk.private_key());
 
-		assert_eq!(pk.public_key().as_bytes(), public.as_bytes());
+		assert_eq!(pk.public_key(), &public);
 	}
 
 	#[test]
