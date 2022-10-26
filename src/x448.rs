@@ -74,6 +74,26 @@ pub fn dh_exchange(private: &PrivateKeyX448, public: &PublicKeyX448) -> SharedKe
 	SharedKeyX448::new(*shared.as_bytes())
 }
 
+// TODO: reuse for Kyber as well
+mod to_serde {
+	use serde::ser::{Serialize, SerializeStruct, Serializer};
+	use super::KeyPairX448;
+	
+	impl Serialize for KeyPairX448 {
+		fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+			S: Serializer
+		{
+			let mut state = serializer.serialize_struct("KeyPairX448", 2)?;
+
+			state.serialize_field("private", &base64::encode(self.private_key().as_bytes()))?;
+			state.serialize_field("public", &base64::encode(self.public_key().as_bytes()))?;
+
+			state.end()
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crate::key_pair::KeyPairSize;

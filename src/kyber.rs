@@ -77,6 +77,26 @@ impl PrivateKeyKyber {
 	}
 }
 
+// TODO: reuse for x448 as well
+mod to_serde {
+	use serde::ser::{Serialize, SerializeStruct, Serializer};
+	use super::KeyPairKyber;
+	
+	impl Serialize for KeyPairKyber {
+		fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+			S: Serializer
+		{
+			let mut state = serializer.serialize_struct("KeyPairKyber", 2)?;
+
+			state.serialize_field("private", &base64::encode(self.private_key().as_bytes()))?;
+			state.serialize_field("public", &base64::encode(self.public_key().as_bytes()))?;
+
+			state.end()
+		}
+	}
+}
+
 /// Encrypts KeyBundle, so that bundle.x448.id = envelope.key_id
 /// The hierarchy goes as follows:
 /// EncryptedEnvelope {

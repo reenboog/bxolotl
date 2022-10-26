@@ -19,6 +19,27 @@ pub struct Prekey {
 	pub last_resort: bool
 }
 
+mod to_serde {
+	use serde::ser::{Serialize, SerializeStruct, Serializer};
+	use super::Prekey;
+	
+	impl Serialize for Prekey {
+		fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+			S: Serializer
+		{
+			let mut state = serializer.serialize_struct("Prekey", 4)?;
+
+			state.serialize_field("id", &self.id())?;
+			state.serialize_field("key_x448", &self.key_x448)?;
+			state.serialize_field("key_kyber", &self.key_kyber)?;
+			state.serialize_field("last_resort", &self.last_resort)?;
+
+			state.end()
+		}
+	}
+}
+
 impl From<&Prekey> for proto::PreKeyData {
 	fn from(src: &Prekey) -> Self {
 		Self {

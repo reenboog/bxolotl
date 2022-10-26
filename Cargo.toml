@@ -16,7 +16,7 @@ prost = { version = "0.9" }
 rand = { version = "0.8.5" }
 rand-07 = { package = "rand", version = "0.7.0" }
 
-#hashing
+# hashing
 sha2 = { version = "0.10" }
 hmac = { version = "0.12.1" }
 
@@ -24,9 +24,15 @@ hmac = { version = "0.12.1" }
 pqcrypto-traits = { version = "0.3"}
 pqcrypto-kyber = { version = "0.7"}
 
-#448 ec
+# 448 ec
 x448 = { version = "0.6" }
+# TODO: move to our own bitbucket repo?
 ed448-rust = { git = "https://github.com/reenboog/ed448-rust", branch = "master" }
+
+# serialize
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+base64 = { version = "0.13" }
 
 # aes_cbc deps
 cipher = { version = "0.4.2", features = ["block-padding", "alloc"] }
