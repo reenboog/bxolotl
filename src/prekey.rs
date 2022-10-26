@@ -88,31 +88,17 @@ impl Prekey {
 	}
 }
 
-// const DEFAULT_GENERATED_PREKEYS: u8 = 100;
-
-// pub fn generate(count: Option<u8>) -> Vec<Prekey> {
-// 	let number_of_prekeys = count.unwrap_or(DEFAULT_GENERATED_PREKEYS);
-// 	let mut generated_keys: Vec<Prekey> = Vec::new();
-// 	for i in 0..number_of_prekeys {
-// 		let key_pair_448 = KeyPairX448::generate();
-// 		let key_pair_kyber = KeyPairKyber::generate();
-
-// 		let prekey = Prekey {
-// 			id: key_pair_448.public_key().id(),
-// 			key_x448: key_pair_448,
-// 			key_kyber: key_pair_kyber,
-// 			last_resort: i == number_of_prekeys - 1,
-// 		};
-
-// 		generated_keys.push(prekey);
-// 	}
-
-// 	return generated_keys;
-// }
+pub fn generate(count: u8) -> Vec<Prekey> {
+	(0..count).map(|idx| Prekey {
+		key_x448: KeyPairX448::generate(),
+		key_kyber: KeyPairKyber::generate(),
+		last_resort: idx == count - 1
+	}).collect()
+}
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::KeyPairX448, kyber::KeyPairKyber, serializable::{Serializable, Deserializable}};
+	use crate::{x448::KeyPairX448, kyber::KeyPairKyber, serializable::{Serializable, Deserializable}, prekey::generate};
 	use super::Prekey;
 
 	#[test]
@@ -130,12 +116,11 @@ mod tests {
 
 	#[test]
 	fn generate_prekeys() {
-		// let prekeys = generate(Some(3));
+		let prekeys = generate(3);
 	
-		// assert_eq!(3, prekeys.len());
-	
-		// assert_eq!(false, prekeys.get(0).unwrap().last_resort);
-		// assert_eq!(false, prekeys.get(1).unwrap().last_resort);
-		// assert_eq!(true, prekeys.get(2).unwrap().last_resort);	
+		assert_eq!(3, prekeys.len());
+		assert_eq!(false, prekeys.get(0).unwrap().last_resort);
+		assert_eq!(false, prekeys.get(1).unwrap().last_resort);
+		assert_eq!(true, prekeys.get(2).unwrap().last_resort);	
 	}
 }
