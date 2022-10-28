@@ -88,11 +88,12 @@ impl Prekey {
 	}
 }
 
-pub fn generate(count: u8) -> Vec<Prekey> {
+/// last_resort prekeys (private keys, in particular) should not be deleted from the DB
+pub fn generate(count: u8, retain_last_resort: bool) -> Vec<Prekey> {
 	(0..count).map(|idx| Prekey {
 		key_x448: KeyPairX448::generate(),
 		key_kyber: KeyPairKyber::generate(),
-		last_resort: idx == count - 1
+		last_resort: retain_last_resort && idx == count - 1
 	}).collect()
 }
 
@@ -116,11 +117,21 @@ mod tests {
 
 	#[test]
 	fn generate_prekeys() {
-		let prekeys = generate(3);
+		let prekeys = generate(3, true);
 	
 		assert_eq!(3, prekeys.len());
 		assert_eq!(false, prekeys.get(0).unwrap().last_resort);
 		assert_eq!(false, prekeys.get(1).unwrap().last_resort);
 		assert_eq!(true, prekeys.get(2).unwrap().last_resort);	
+	}
+
+	#[test]
+	fn generate_prekeys_no_last_resort() {
+		let prekeys = generate(3, false);
+	
+		assert_eq!(3, prekeys.len());
+		assert_eq!(false, prekeys.get(0).unwrap().last_resort);
+		assert_eq!(false, prekeys.get(1).unwrap().last_resort);
+		assert_eq!(false, prekeys.get(2).unwrap().last_resort);	
 	}
 }
