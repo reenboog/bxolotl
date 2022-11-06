@@ -108,7 +108,7 @@ impl TryFrom<proto::CryptoMessage> for Message {
 			kyber_encrypted_ratchet_key,
 			ciphertext: msg.ciphertext.ok_or(Error::NoCiphertext)?,
 			key_exchange: msg.key_exchange.map_or(Ok(None), |kex| Ok(Some(KeyExchange::try_from(kex).or(Err(Error::BadKeyExchange))?)))?,
-			_type: Type::try_from(msg.message_type.ok_or(Error::NoMessageType)?)?
+			_type: Type::try_from(msg.message_type.unwrap_or(Type::Chat as i32))?
 		})
 	}
 }

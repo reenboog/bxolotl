@@ -40,7 +40,7 @@ impl Hkdf {
 			input.push(i as u8);
 
 			prev = hmac::digest(&self.prk.into(), &input).as_bytes().to_vec();
-			res.extend(prev.clone());
+			res.extend(&prev);
 		} 
 
 		res[..LEN].try_into().unwrap()
