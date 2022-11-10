@@ -2,7 +2,7 @@ use std::{sync::Arc, fmt::Display};
 
 use async_trait::async_trait;
 use prost::encoding::bool;
-use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KeyBundle, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys};
+use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KeyBundle, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys, job_queue};
 
 /*
 
@@ -48,20 +48,18 @@ pub trait Apis {
 	async fn fetch_prekey(&self, nid: &str, auth_nid: &str, auth_token: &str) -> Result<FetchedPrekeyBundle, Error>;
 }
 
-pub struct Cryptor<S, A>
-where
-	S: Storage + Send,
-	A: Apis + Send
-{
+pub struct Cryptor<S, A> {
 	storage: Arc<S>,
-	apis: Arc<A>
+	apis: Arc<A>,
+	tasks: job_queue::Queue<String>
 }
 
 impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 	pub fn new(storage: Arc<S>, apis: Arc<A>) -> Self {
 		Self {
 			storage: Arc::clone(&storage),
-			apis: Arc::clone(&apis)
+			apis: Arc::clone(&apis),
+			tasks: job_queue::Queue::new()
 		}
 	}
 }
@@ -122,8 +120,16 @@ pub struct FetchedPrekeyBundle {
 	pub identity: IdentityKeys
 }
 
+// TODO: reuse ccl's existing Nid type
+
 impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 	pub async fn decrypt(&self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
+		self.tasks.push(nid.to_string(), || {
+			self.decrypt_msg(mac, nid, my_nid)
+		}).await
+	}
+
+	async fn decrypt_msg(&self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
 		// all the state change should be saved here, not by the caller – should it?
 		let mac = AxolotlMac::deserialize(mac).or(Err(Error::BadMacFormat))?;
 
@@ -221,9 +227,15 @@ impl<S: Storage + Send, A: Apis + Send> Cryptor<S, A> {
 		}
 	}
 
+	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, my_nid: &str, auth_token: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
+		self.tasks.push(nid.to_string(), || {
+			self.encrypt_msg(plaintext, _type, nid, my_nid, auth_token, force_reset)
+		}).await
+	}
+
 	// force_kyber, as is now implemented, is not what it might look like: it can kyber-encrypt my next ratchet when the time
 	// to turn comes, but it can't turn it emmidiately because of Axolotl's strict ping-pong nature
-	pub async fn encrypt(&self, plaintext: &[u8], _type: Type, nid: &str, my_nid: &str, auth_token: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
+	async fn encrypt_msg(&self, plaintext: &[u8], _type: Type, nid: &str, my_nid: &str, auth_token: &str, force_reset: bool) -> Result<Vec<u8>, Error> {
 		if force_reset {
 			self.storage.clear_all_sessions_for_nid(nid);
 		}

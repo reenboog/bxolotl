@@ -26,3 +26,4 @@ pub mod id;
 pub mod mac;
 pub mod cryptor;
 pub mod identity_keys;
+pub mod job_queue;
