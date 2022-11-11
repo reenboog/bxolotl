@@ -9,7 +9,7 @@ pub struct Queue<Key> {
 
 impl<Key> Queue<Key>
 where
-	Key: Eq + Hash + Clone
+	Key: Eq + Hash
 {
 	pub fn new() -> Self {
 		Self {
@@ -25,7 +25,7 @@ where
 		let tasks = self.tasks.clone();
 
 		let t = {
-			let key = key.clone();
+			let key = key;
 			let mut tasks = tasks.lock().await;
 			let t = tasks.remove(&key);
 
