@@ -26,6 +26,10 @@ impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> KeyPair<T, PRIV_SIZE, PUB
 	pub fn private_key(&self) -> &PrivateKey<T, PRIV_SIZE> {
 		&self.private
 	}
+
+	pub fn id(&self) -> u64 {
+		self.public_key().id()
+	}
 }
 
 impl<T, const PRIV_SIZE: usize, const PUB_SIZE: usize> Clone for KeyPair<T, PRIV_SIZE, PUB_SIZE> {
