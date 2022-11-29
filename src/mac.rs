@@ -5,14 +5,14 @@ pub struct AxolotlMac {
 	// required by MessageKey::decrypt to hmac-verify AxolotlMac's body;
 	// AxolotlMac::body::serialize() was used previously, but the chain will fail if the protobuf schema
 	// of the message is different from what's used by the library, eg in case of default values, added/removed fields, etc
-	_raw_body: Vec<u8>,
+	raw_body: Vec<u8>,
 	body: Message,
 	mac: Digest
 }
 
 impl AxolotlMac {
 	pub fn new(body: &Message, mac: &Digest) -> Self {
-		Self { _raw_body: body.serialize(), body: body.clone(), mac: *mac }
+		Self { raw_body: body.serialize(), body: body.clone(), mac: *mac }
 	}
 
 	pub fn body(&self) -> &Message {
@@ -20,7 +20,7 @@ impl AxolotlMac {
 	}
 
 	pub fn raw_body(&self) -> &[u8] {
-		&self._raw_body
+		&self.raw_body
 	}
 
 	pub fn set_mac(&mut self, mac: Digest) {
@@ -67,7 +67,7 @@ impl TryFrom<proto::AxolotlMac> for AxolotlMac {
 		let body = value.body.ok_or(Error::NoBody)?;
 
 		Ok(Self {
-			_raw_body: body.encode_to_vec(),
+			raw_body: body.encode_to_vec(),
 			body: crate::message::Message::try_from(body).or(Err(Error::BadBodyFormat))?,
 			mac: Digest::try_from(value.mac.ok_or(Error::NoDigest)?).or(Err(Error::WrongDigestLen))?
 		})
