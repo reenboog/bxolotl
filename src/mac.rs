@@ -2,17 +2,25 @@ use crate::{message::Message, hmac::Digest, proto, serializable::{Serializable, 
 
 #[derive(Debug, PartialEq)]
 pub struct AxolotlMac {
+	// required by MessageKey::decrypt to hmac-verify AxolotlMac's body;
+	// AxolotlMac::body::serialize() was used previously, but the chain will fail if the protobuf schema
+	// of the message is different from what's used by the library, eg in case of default values, added/removed fields, etc
+	raw_body: Vec<u8>,
 	body: Message,
 	mac: Digest
 }
 
 impl AxolotlMac {
 	pub fn new(body: &Message, mac: &Digest) -> Self {
-		Self { body: body.clone(), mac: *mac }
+		Self { raw_body: body.serialize(), body: body.clone(), mac: *mac }
 	}
 
 	pub fn body(&self) -> &Message {
 		&self.body
+	}
+
+	pub fn raw_body(&self) -> &[u8] {
+		&self.raw_body
 	}
 
 	pub fn set_mac(&mut self, mac: Digest) {
@@ -54,8 +62,13 @@ impl TryFrom<proto::AxolotlMac> for AxolotlMac {
 	type Error = Error;
 
 	fn try_from(value: proto::AxolotlMac) -> Result<Self, Self::Error> {
+		use prost::Message;
+
+		let body = value.body.ok_or(Error::NoBody)?;
+
 		Ok(Self {
-			body: Message::try_from(value.body.ok_or(Error::NoBody)?).or(Err(Error::BadBodyFormat))?,
+			raw_body: body.encode_to_vec(),
+			body: crate::message::Message::try_from(body).or(Err(Error::BadBodyFormat))?,
 			mac: Digest::try_from(value.mac.ok_or(Error::NoDigest)?).or(Err(Error::WrongDigestLen))?
 		})
 	}
@@ -89,6 +102,7 @@ mod tests {
 		msg.set_prev_counter(3);
 		msg.set_ciphertext(ct);
 		msg.set_ratchet_key(PublicKeyX448::from(&[1u8; KeyTypeX448::PUB]));
+		msg.set_type(Type::Chat);
 
 		let mac_key = hmac::Key::new([42u8; hmac::Key::SIZE]);
 		let digest = hmac::digest(&mac_key, &msg.serialize());

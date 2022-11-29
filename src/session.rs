@@ -121,7 +121,7 @@ impl Session {
 		their_kyber_identity: PublicKeyKyber,
 		force_reset: bool) -> Self {
 			
-			let id = KeyExchange::derive_id(my_identity.public_key(), their_prekey.id());
+			let id = KeyExchange::derive_id(my_identity.public_key(), their_prekey.id(), my_ephemeral.id());
 			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
 			let key_exchange = KeyExchange {
 				x448_identity: my_identity.public_key().clone(),
@@ -160,7 +160,7 @@ impl Session {
 		their_identity: PublicKeyX448,
 		their_ephemeral: PublicKeyX448,
 		their_ratchet_kyber: PublicKeyKyber) -> Self {
-			let id = KeyExchange::derive_id(&their_identity, my_prekey.public_key().id());
+			let id = KeyExchange::derive_id(&their_identity, my_prekey.id(), their_ephemeral.id());
 			let master_key = MasterKey::bob(&my_identity, &my_signed_prekey, &my_prekey, &their_identity, &their_ephemeral);
 
 			Self {

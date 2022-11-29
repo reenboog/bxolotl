@@ -54,7 +54,7 @@ impl MessageKey {
 	}
 
 	pub fn decrypt(&self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
-		if !hmac::verify(&mac.body().serialize(), &self.mac_key, mac.mac()) {
+		if !hmac::verify(&mac.raw_body(), &self.mac_key, mac.mac()) {
 			Err(Error::WrongMac)
 		} else {
 			let aes = AesCbc::new(self.enc_key, self.iv);
