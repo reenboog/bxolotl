@@ -1,11 +1,26 @@
-use crate::{chain_key::ChainKey, root_key::RootKey, receive_chain::ReceiveChain, key_exchange::KeyExchange, signed_public_key::SignedPublicKeyX448, signed_key_pair::{SignedKeyPairX448}, master_key::{MasterKey}, message::{Message, Type}, kyber::{self, EncryptedEnvelope, KeyBundle, KeyPairKyber, PublicKeyKyber, PrivateKeyKyber}, chain::{Chain, self}, message_key, x448::{KeyPairX448, PublicKeyX448}, ed448::KeyPairEd448, mac::AxolotlMac};
+use crate::{
+	chain::{self, Chain},
+	chain_key::ChainKey,
+	ed448::KeyPairEd448,
+	key_exchange::KeyExchange,
+	kyber::{self, EncryptedEnvelope, KeyBundle, KeyPairKyber, PrivateKeyKyber, PublicKeyKyber},
+	mac::AxolotlMac,
+	master_key::MasterKey,
+	message::{Message, Type},
+	message_key,
+	receive_chain::ReceiveChain,
+	root_key::RootKey,
+	signed_key_pair::SignedKeyPairX448,
+	signed_public_key::SignedPublicKeyX448,
+	x448::{KeyPairX448, PublicKeyX448},
+};
 
 pub const RATCHETS_BETWEEN_KYBER: u32 = 20;
 
 #[derive(PartialEq, Debug, Eq, Copy, Clone)]
 pub enum Role {
 	Alice = 0,
-	Bob = 1
+	Bob = 1,
 }
 
 #[derive(Debug, PartialEq)]
@@ -25,7 +40,7 @@ pub enum Error {
 	NoLocalKyber,
 	TooManyKeySkipped,
 	WrongMessageKey,
-	WrongMac
+	WrongMac,
 }
 
 // TODO: test
@@ -35,7 +50,7 @@ impl From<kyber::Error> for Error {
 			kyber::Error::DecodeError => Self::KyberBadEncoding,
 			kyber::Error::WrongCiphertext => Self::KyberWrongCiphertext,
 			kyber::Error::BadAesParams => Self::KyberBadAesParams,
-			kyber::Error::WrongEphKeyLen => Self::KyberBadAesParams,  // TODO: a dedicated error?
+			kyber::Error::WrongEphKeyLen => Self::KyberBadAesParams, // TODO: a dedicated error?
 			kyber::Error::WrongKyberKeyLen => Self::KyberBadAesParams,
 			kyber::Error::WrongIvLen => Self::KyberBadAesParams,
 			kyber::Error::WrongKeyLen => Self::KyberBadAesParams,
@@ -52,7 +67,7 @@ impl From<message_key::Error> for Error {
 	fn from(key: message_key::Error) -> Self {
 		match key {
 			message_key::Error::BadKeyMaterial => Self::WrongMessageKey,
-			message_key::Error::WrongMac => Self::WrongMac
+			message_key::Error::WrongMac => Self::WrongMac,
 		}
 	}
 }
@@ -63,7 +78,7 @@ impl From<chain::Error> for Error {
 	}
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Session {
 	id: u64,
 	role: Role,
@@ -73,11 +88,11 @@ pub struct Session {
 	prev_counter: u32, // prev sending chain len?
 	ratchet_counter: u32,
 
-	// saved for Bob only, alice uses her kyber_ratched instead; FIXME: move to Role? 
+	// saved for Bob only, alice uses her kyber_ratched instead; FIXME: move to Role?
 	my_kyber_identity: Option<KeyPairKyber>,
 
 	// TODO: these two can be made non optional, if instead of resetting on decrypt a new ratched is generated
-	my_ratchet: Option<KeyPairX448>, 
+	my_ratchet: Option<KeyPairX448>,
 	my_kyber_ratchet: Option<KeyPairKyber>,
 
 	// can be initially nil for Bob (until decrypt, plus, it can be kyber-encrypted itself)
@@ -88,8 +103,8 @@ pub struct Session {
 
 	root_key: RootKey,
 	// TODO: can be made non optional if root_key is initialized in either alice/bob instead of encrypt as is now
-	send_chain_key: Option<ChainKey>, 
-	receive_chain: ReceiveChain
+	send_chain_key: Option<ChainKey>,
+	receive_chain: ReceiveChain,
 }
 
 impl Session {
@@ -107,7 +122,8 @@ impl Session {
 }
 
 impl Session {
-	pub fn alice(my_identity: KeyPairX448, 
+	pub fn alice(
+		my_identity: KeyPairX448,
 		my_ephemeral: KeyPairX448,
 		my_signing_identity: KeyPairEd448,
 		my_kyber_identity: KeyPairKyber,
@@ -117,67 +133,92 @@ impl Session {
 		their_prekey: PublicKeyX448,
 		their_kyber_prekey: PublicKeyKyber,
 		their_kyber_identity: PublicKeyKyber,
-		force_reset: bool) -> Self {
-			
-			let id = KeyExchange::derive_id(my_identity.public_key(), their_prekey.id(), my_ephemeral.id());
-			let master_key = MasterKey::alice(&my_identity, &my_ephemeral, &their_identity, &their_signed_prekey, &their_prekey);
-			let key_exchange = KeyExchange {
-				x448_identity: my_identity.public_key().clone(),
-				kyber_encrypted_ephemeral: kyber::encrypt_keys(my_ephemeral.public_key(), my_kyber_ratchet.public_key(), kyber::EncryptionMode::Double { first_key: &their_kyber_prekey, second_key: &their_kyber_identity }),
-				kyber_identity: my_kyber_identity.public_key().clone(),
-				ed448_identity: my_signing_identity.public_key().clone(),
-				signed_prekey_id: their_signed_prekey.key().id(),
-				x448_prekey_id: their_prekey.id(),
-				force_reset
-			};
+		force_reset: bool,
+	) -> Self {
+		let id = KeyExchange::derive_id(
+			my_identity.public_key(),
+			their_prekey.id(),
+			my_ephemeral.id(),
+		);
+		let master_key = MasterKey::alice(
+			&my_identity,
+			&my_ephemeral,
+			&their_identity,
+			&their_signed_prekey,
+			&their_prekey,
+		);
+		let key_exchange = KeyExchange {
+			x448_identity: my_identity.public_key().clone(),
+			kyber_encrypted_ephemeral: kyber::encrypt_keys(
+				my_ephemeral.public_key(),
+				my_kyber_ratchet.public_key(),
+				kyber::EncryptionMode::Double {
+					first_key: &their_kyber_prekey,
+					second_key: &their_kyber_identity,
+				},
+			),
+			kyber_identity: my_kyber_identity.public_key().clone(),
+			ed448_identity: my_signing_identity.public_key().clone(),
+			signed_prekey_id: their_signed_prekey.key().id(),
+			x448_prekey_id: their_prekey.id(),
+			force_reset,
+		};
 
-			Self {
-				id,
-				role: Role::Alice,
-				receive_only: false,
-				counter: 0,
-				prev_counter: 0,
-				ratchet_counter: 0,
-				my_kyber_identity: Some(my_kyber_identity),
-				my_ratchet: None,
-				my_kyber_ratchet: Some(my_kyber_ratchet),
-				their_ratchet: Some(their_prekey),
-				their_ratchet_kyber: their_kyber_prekey,
-				unacked_key_exchange: Some(key_exchange),
-				root_key: *master_key.root_key(),
-				send_chain_key: None, 
-				receive_chain: ReceiveChain::new() // REVIEW: make optional?
-			}
+		Self {
+			id,
+			role: Role::Alice,
+			receive_only: false,
+			counter: 0,
+			prev_counter: 0,
+			ratchet_counter: 0,
+			my_kyber_identity: Some(my_kyber_identity),
+			my_ratchet: None,
+			my_kyber_ratchet: Some(my_kyber_ratchet),
+			their_ratchet: Some(their_prekey),
+			their_ratchet_kyber: their_kyber_prekey,
+			unacked_key_exchange: Some(key_exchange),
+			root_key: *master_key.root_key(),
+			send_chain_key: None,
+			receive_chain: ReceiveChain::new(), // REVIEW: make optional?
+		}
 	}
 
-	pub fn bob(my_identity: KeyPairX448,
+	pub fn bob(
+		my_identity: KeyPairX448,
 		my_kyber_identity: KeyPairKyber,
 		my_signed_prekey: SignedKeyPairX448,
 		my_prekey: KeyPairX448,
 		my_kyber_prekey: KeyPairKyber,
 		their_identity: PublicKeyX448,
 		their_ephemeral: PublicKeyX448,
-		their_ratchet_kyber: PublicKeyKyber) -> Self {
-			let id = KeyExchange::derive_id(&their_identity, my_prekey.id(), their_ephemeral.id());
-			let master_key = MasterKey::bob(&my_identity, &my_signed_prekey, &my_prekey, &their_identity, &their_ephemeral);
+		their_ratchet_kyber: PublicKeyKyber,
+	) -> Self {
+		let id = KeyExchange::derive_id(&their_identity, my_prekey.id(), their_ephemeral.id());
+		let master_key = MasterKey::bob(
+			&my_identity,
+			&my_signed_prekey,
+			&my_prekey,
+			&their_identity,
+			&their_ephemeral,
+		);
 
-			Self {
-				id,
-				role: Role::Bob, 
-				receive_only: false,
-				counter: 0, 
-				prev_counter: 0, 
-				ratchet_counter: 0,
-				my_kyber_identity: Some(my_kyber_identity), 
-				my_ratchet: Some(my_prekey), 
-				my_kyber_ratchet: Some(my_kyber_prekey),
-				their_ratchet: None, 
-				their_ratchet_kyber, 
-				unacked_key_exchange: None,
-				root_key: *master_key.root_key(),
-				send_chain_key: None, // REVIEW: master_key.chain_key? –rather not, for it's not used until encrypt
-				receive_chain: ReceiveChain::new() 
-			}
+		Self {
+			id,
+			role: Role::Bob,
+			receive_only: false,
+			counter: 0,
+			prev_counter: 0,
+			ratchet_counter: 0,
+			my_kyber_identity: Some(my_kyber_identity),
+			my_ratchet: Some(my_prekey),
+			my_kyber_ratchet: Some(my_kyber_prekey),
+			their_ratchet: None,
+			their_ratchet_kyber,
+			unacked_key_exchange: None,
+			root_key: *master_key.root_key(),
+			send_chain_key: None, // REVIEW: master_key.chain_key? –rather not, for it's not used until encrypt
+			receive_chain: ReceiveChain::new(),
+		}
 	}
 }
 
@@ -203,7 +244,12 @@ impl Session {
 
 			// REVIEW: do I need MasterKey at all?
 			// TODO: don't hard unwrap
-			let (ck, rk) = MasterKey::derive(&self.root_key, self.my_ratchet.as_ref().unwrap(), self.their_ratchet.as_ref().unwrap()).into(); 
+			let (ck, rk) = MasterKey::derive(
+				&self.root_key,
+				self.my_ratchet.as_ref().unwrap(),
+				self.their_ratchet.as_ref().unwrap(),
+			)
+			.into();
 
 			self.send_chain_key = Some(ck);
 			self.root_key = rk;
@@ -216,7 +262,13 @@ impl Session {
 
 		if let Some(ref my_kyber_ratchet) = self.my_kyber_ratchet {
 			// TODO: don't hard unwrap
-			msg.set_kyber_encrypted_ratchet_key(kyber::encrypt_keys(self.my_ratchet.as_ref().unwrap().public_key(), my_kyber_ratchet.public_key(), kyber::EncryptionMode::Once { key: &self.their_ratchet_kyber }));
+			msg.set_kyber_encrypted_ratchet_key(kyber::encrypt_keys(
+				self.my_ratchet.as_ref().unwrap().public_key(),
+				my_kyber_ratchet.public_key(),
+				kyber::EncryptionMode::Once {
+					key: &self.their_ratchet_kyber,
+				},
+			));
 		} else {
 			msg.set_ratchet_key(self.my_ratchet.as_ref().unwrap().public_key().clone());
 		}
@@ -226,7 +278,7 @@ impl Session {
 		msg.set_key_exchange(self.unacked_key_exchange.clone());
 
 		// TODO: don't hard unwrap
-		let mk = self.send_chain_key.as_ref().unwrap().message_key(); 
+		let mk = self.send_chain_key.as_ref().unwrap().message_key();
 		let mac = mk.encrypt(plaintext, &mut msg);
 
 		self.counter += 1;
@@ -237,24 +289,48 @@ impl Session {
 	}
 
 	fn decrypt_kyber_encrypted_ratchet(&self, eph: &EncryptedEnvelope) -> Result<KeyBundle, Error> {
-		use kyber::DecryptionMode::{Once, Double};
+		use kyber::DecryptionMode::{Double, Once};
 
 		let find_key = |id| -> Result<&PrivateKeyKyber, kyber::Error> {
 			// TODO: check key id? it'll fail decrypting anyway, if somethign goes wrong
-			Ok(self.receive_chain.kyber_key_pair(id).or(self.my_kyber_ratchet.as_ref()).ok_or(kyber::Error::UnknownKyberRatchet)?.private_key())
+			Ok(self
+				.receive_chain
+				.kyber_key_pair(id)
+				.or(self.my_kyber_ratchet.as_ref())
+				.ok_or(kyber::Error::UnknownKyberRatchet)?
+				.private_key())
 		};
 
 		if eph.double_encrypted {
 			// second key is the outer key, while the first key is the inner one, ie `encrypt(encrypt(data, first), second)
-			let second_key = self.my_kyber_identity.as_ref().ok_or(Error::NoLocalKyber)?.private_key();
+			let second_key = self
+				.my_kyber_identity
+				.as_ref()
+				.ok_or(Error::NoLocalKyber)?
+				.private_key();
 
-			Ok(kyber::decrypt_keys(eph, Double { second_key, first_key: Box::new(find_key) })?)
+			Ok(kyber::decrypt_keys(
+				eph,
+				Double {
+					second_key,
+					first_key: Box::new(find_key),
+				},
+			)?)
 		} else {
-			Ok(kyber::decrypt_keys::<kyber::KeySource>(eph, Once { key: find_key(eph.payload.encryption_key_id)? })?)
+			Ok(kyber::decrypt_keys::<kyber::KeySource>(
+				eph,
+				Once {
+					key: find_key(eph.payload.encryption_key_id)?,
+				},
+			)?)
 		}
 	}
 
-	fn decrypt_with_current_or_past_chain(&mut self, mac: &AxolotlMac, purported_ratchet: &PublicKeyX448) -> Result<Option<Vec<u8>>, Error> {
+	fn decrypt_with_current_or_past_chain(
+		&mut self,
+		mac: &AxolotlMac,
+		purported_ratchet: &PublicKeyX448,
+	) -> Result<Option<Vec<u8>>, Error> {
 		// TODO: introduce Chain.id()
 		if let Some(current) = self.receive_chain.current().map(|c| c.ratchet_key().id()) {
 			if let Some(chain) = self.receive_chain.chain_mut(purported_ratchet) {
@@ -300,7 +376,8 @@ impl Session {
 		let purported_kyber_ratchet: PublicKeyKyber; // TODO: can I get rid of this?
 
 		if let Some(kyber_encrypted_ratchet) = msg.kyber_encrypted_ratchet_key() {
-			let KeyBundle { ephemeral, kyber } = self.decrypt_kyber_encrypted_ratchet(kyber_encrypted_ratchet)?;
+			let KeyBundle { ephemeral, kyber } =
+				self.decrypt_kyber_encrypted_ratchet(kyber_encrypted_ratchet)?;
 
 			purported_ratchet = ephemeral;
 			purported_kyber_ratchet = kyber;
@@ -324,7 +401,8 @@ impl Session {
 		if let Some(ref my_kyber) = self.my_kyber_ratchet {
 			new_chain.set_kyber_ratchet_key(my_kyber.clone());
 		} else if let Some(ref current) = current {
-			new_chain.set_kyber_ratchet_key(current.kyber_ratchet_key().as_ref().unwrap().clone()); // TODO: don't hard unwrap
+			new_chain.set_kyber_ratchet_key(current.kyber_ratchet_key().as_ref().unwrap().clone());
+			// TODO: don't hard unwrap
 		}
 
 		let next = new_chain.stage(msg.counter()).unwrap(); // TODO: don't hard unwrap
@@ -351,8 +429,19 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-	use crate::{x448::{KeyPairX448}, ed448::KeyPairEd448, kyber::{KeyPairKyber, PrivateKeyKyber, KeyBundle, self}, signed_key_pair::{SignedKeyPairX448}, signed_public_key::SignedPublicKeyX448, key_exchange::KeyExchange, message::Type, session::RATCHETS_BETWEEN_KYBER, chain, hmac};
-	use super::{Session, AxolotlMac, Error};
+	use super::{AxolotlMac, Error, Session};
+	use crate::{
+		chain,
+		ed448::KeyPairEd448,
+		hmac,
+		key_exchange::KeyExchange,
+		kyber::{self, KeyBundle, KeyPairKyber, PrivateKeyKyber},
+		message::Type,
+		session::RATCHETS_BETWEEN_KYBER,
+		signed_key_pair::SignedKeyPairX448,
+		signed_public_key::SignedPublicKeyX448,
+		x448::KeyPairX448,
+	};
 
 	fn alice_x448_identity() -> KeyPairX448 {
 		let private = b"\x00\xc4\x0a\x23\x46\x32\x7e\x1c\x19\x0d\xac\x29\x0c\xb3\x8e\x41\x79\x73\x52\x43\x00\x4f\xb3\xae\x4f\xc4\x82\xf4\xb0\xa2\x57\x66\x48\xa5\xe8\xab\xc0\x06\x93\x4f\x78\xfe\x7b\xe7\x67\x11\x65\x4d\x9a\x55\x5a\xe9\x28\x93\x0b\x80";
@@ -429,7 +518,15 @@ mod tests {
 		let public = b"\x36\xcb\x46\x0b\xd7\xcb\x41\xe3\xd6\x24\x0a\x25\x6b\x46\xda\xc5\x7f\xeb\x1e\x71\x38\x7f\x93\x1f\x86\xdb\x4d\xde\xd1\x1d\x72\x34\x5d\xe0\x51\x1f\xe4\xa4\xf0\xe9\x26\x01\x1c\xf2\x12\x2e\xd6\x40\x8f\x2c\x4b\xe0\xbf\x92\x2c\x1a";
 		let kp = KeyPairX448::new(private.into(), public.into());
 
-		SignedKeyPairX448::new(kp.private_key().clone(), SignedPublicKeyX448::new(kp.public_key().clone(), bob_ed448_identity().private_key().sign(kp.public_key().as_bytes())))
+		SignedKeyPairX448::new(
+			kp.private_key().clone(),
+			SignedPublicKeyX448::new(
+				kp.public_key().clone(),
+				bob_ed448_identity()
+					.private_key()
+					.sign(kp.public_key().as_bytes()),
+			),
+		)
 	}
 
 	pub fn alice_session() -> Session {
@@ -444,30 +541,38 @@ mod tests {
 			bob_x448_prekey().public_key().clone(),
 			bob_kyber_prekey().public_key().clone(),
 			bob_kyber_identity().public_key().clone(),
-			false)
+			false,
+		)
 	}
 
 	fn bob_session(kex: &KeyExchange) -> Session {
 		let decrypted = decrypt_kex(kex);
 		Session::bob(
 			bob_x448_identity(),
-			bob_kyber_identity(), 
-			bob_signed_prekey(), 
-			bob_x448_prekey(), 
-			bob_kyber_prekey(), 
-			kex.x448_identity.clone(), 
-			decrypted.ephemeral.clone(), 
-			decrypted.kyber.clone())
+			bob_kyber_identity(),
+			bob_signed_prekey(),
+			bob_x448_prekey(),
+			bob_kyber_prekey(),
+			kex.x448_identity.clone(),
+			decrypted.ephemeral.clone(),
+			decrypted.kyber.clone(),
+		)
 	}
 
 	fn decrypt_kex(kex: &KeyExchange) -> KeyBundle {
 		let bob_kyber_prekey = bob_kyber_prekey();
 
-		let find_key = |_| -> Result<&PrivateKeyKyber, kyber::Error> {
-			Ok(bob_kyber_prekey.private_key())
-		};
+		let find_key =
+			|_| -> Result<&PrivateKeyKyber, kyber::Error> { Ok(bob_kyber_prekey.private_key()) };
 
-		kyber::decrypt_keys(&kex.kyber_encrypted_ephemeral, kyber::DecryptionMode::Double { second_key: bob_kyber_identity().private_key(), first_key: Box::new(find_key) }).unwrap()
+		kyber::decrypt_keys(
+			&kex.kyber_encrypted_ephemeral,
+			kyber::DecryptionMode::Double {
+				second_key: bob_kyber_identity().private_key(),
+				first_key: Box::new(find_key),
+			},
+		)
+		.unwrap()
 	}
 
 	fn turn_ratchet(alice: &mut Session, bob: &mut Session) -> (AxolotlMac, AxolotlMac) {
@@ -521,7 +626,9 @@ mod tests {
 		assert!(bob.unacked_key_exchange.is_none());
 
 		// make bob send a message to alice to ratchet once
-		let b0 = alice.decrypt(&bob.encrypt(b"hi from bob", Type::Chat)).unwrap();
+		let b0 = alice
+			.decrypt(&bob.encrypt(b"hi from bob", Type::Chat))
+			.unwrap();
 
 		assert_eq!(b0, b"hi from bob");
 
@@ -555,7 +662,7 @@ mod tests {
 		// also, alice's internal state should update
 		assert_eq!(alice.counter, 3);
 		assert_eq!(alice.prev_counter, 3);
-		
+
 		let rcvd3 = bob.decrypt(&a3).unwrap();
 		let rcvd4 = bob.decrypt(&a4).unwrap();
 		let rcvd5 = bob.decrypt(&a5).unwrap();
@@ -588,7 +695,9 @@ mod tests {
 		_ = bob.decrypt(&a2).unwrap();
 
 		// make bob send a message to alice to ratchet once
-		_ = alice.decrypt(&bob.encrypt(b"hi from bob", Type::Chat)).unwrap();
+		_ = alice
+			.decrypt(&bob.encrypt(b"hi from bob", Type::Chat))
+			.unwrap();
 
 		// now, alice sends a few more messages with a new ratchet
 		let a3 = alice.encrypt(b"hi 3", Type::Chat);
@@ -602,13 +711,15 @@ mod tests {
 		assert!(a3.body().kyber_encrypted_ratchet_key.is_none());
 		assert!(a4.body().kyber_encrypted_ratchet_key.is_none());
 		assert!(a5.body().kyber_encrypted_ratchet_key.is_none());
-		
-		// now, bob decrypts 
+
+		// now, bob decrypts
 		_ = bob.decrypt(&a3).unwrap();
 		_ = bob.decrypt(&a4).unwrap();
 		_ = bob.decrypt(&a5).unwrap();
 
-		_ = alice.decrypt(&bob.encrypt(b"meaning of life, please?", Type::Chat)).unwrap();
+		_ = alice
+			.decrypt(&bob.encrypt(b"meaning of life, please?", Type::Chat))
+			.unwrap();
 
 		// now, make alice kyber-encrypt her next message's ratchet
 		alice.force_kyber_for_next();
@@ -621,7 +732,6 @@ mod tests {
 		assert!(a7.body().ratchet_key.is_none());
 		assert!(a6.body().kyber_encrypted_ratchet_key.is_some());
 		assert!(a7.body().kyber_encrypted_ratchet_key.is_some());
-
 	}
 
 	#[test]
@@ -632,19 +742,37 @@ mod tests {
 		// I used one of your prekeys for this session
 		assert_eq!(kex.x448_prekey_id, bob_x448_prekey().public_key().id());
 		// as well as one of your signed prekeys
-		assert_eq!(kex.signed_prekey_id, bob_signed_prekey().public().key().id());
+		assert_eq!(
+			kex.signed_prekey_id,
+			bob_signed_prekey().public().key().id()
+		);
 		// and this is my identity in turn
-		assert_eq!(kex.x448_identity.id(), alice_x448_identity().public_key().id());
+		assert_eq!(
+			kex.x448_identity.id(),
+			alice_x448_identity().public_key().id()
+		);
 		// my kyber-encrypted ratchet
-		assert_eq!(kex.kyber_encrypted_ephemeral.key_id, alice_ephemeral().public_key().id());
+		assert_eq!(
+			kex.kyber_encrypted_ephemeral.key_id,
+			alice_ephemeral().public_key().id()
+		);
 		// it is double encrypted, by the way,
 		assert!(kex.kyber_encrypted_ephemeral.double_encrypted);
 		// with your kyber identity first (and another key on top)
-		assert_eq!(kex.kyber_encrypted_ephemeral.payload.encryption_key_id, bob_kyber_identity().public_key().id());
+		assert_eq!(
+			kex.kyber_encrypted_ephemeral.payload.encryption_key_id,
+			bob_kyber_identity().public_key().id()
+		);
 		// this is my kyber identity (not used by Session actually, but we have it in protobuf)
-		assert_eq!(kex.kyber_identity.id(), alice_kyber_identity().public_key().id());
+		assert_eq!(
+			kex.kyber_identity.id(),
+			alice_kyber_identity().public_key().id()
+		);
 		// and my signing key
-		assert_eq!(kex.ed448_identity.id(), alice_ed448_identity().public_key().id());
+		assert_eq!(
+			kex.ed448_identity.id(),
+			alice_ed448_identity().public_key().id()
+		);
 	}
 
 	#[test]
@@ -653,15 +781,33 @@ mod tests {
 		let a0 = alice.encrypt(b"hi 0", Type::Chat);
 		let kex = a0.body().key_exchange.as_ref().unwrap();
 
-		// all unacked messages are to have a kex containing a double encrypted eph: first, it's 
+		// all unacked messages are to have a kex containing a double encrypted eph: first, it's
 		// encrypted with bob's kyber prekey, then – his kyber identity
 		assert_eq!(alice.ratchet_counter, 1);
 		assert!(kex.kyber_encrypted_ephemeral.double_encrypted);
-		assert_eq!(kex.kyber_encrypted_ephemeral.payload.encryption_key_id, bob_kyber_identity().public_key().id());
+		assert_eq!(
+			kex.kyber_encrypted_ephemeral.payload.encryption_key_id,
+			bob_kyber_identity().public_key().id()
+		);
 		// while initial kyber encrypted ratchet eph is never double encrypted
-		assert_eq!(a0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+		assert_eq!(
+			a0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.double_encrypted,
+			false
+		);
 		// bob's prekey is used as his first kyber ratchet to encrypt alice's eph ratchet
-		assert_eq!(a0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, bob_kyber_prekey().public_key().id());
+		assert_eq!(
+			a0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.payload
+				.encryption_key_id,
+			bob_kyber_prekey().public_key().id()
+		);
 		// plain ratchet eph should be None, by the way
 		assert!(a0.body().ratchet_key.is_none());
 
@@ -688,29 +834,81 @@ mod tests {
 			assert!(b.body().ratchet_key.is_some());
 		}
 
-		let a1 = alice.encrypt(b"this goes with a new kyber encrypted ratchet by alice", Type::Chat);
+		let a1 = alice.encrypt(
+			b"this goes with a new kyber encrypted ratchet by alice",
+			Type::Chat,
+		);
 
 		// now, on the Nth turn, alice includes a new kyber key, encrypted with bob's kyber ratchet; no plain ratchet is used
 		assert!(a1.body().ratchet_key.is_none());
 		// again, it should not be double encrypted (double encryption is used for kex only)
-		assert_eq!(a1.body().kyber_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+		assert_eq!(
+			a1.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.double_encrypted,
+			false
+		);
 
 		// make sure different ephemeral keys are used between the ratchets
-		assert_ne!(a0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().key_id, a1.body().kyber_encrypted_ratchet_key.as_ref().unwrap().key_id);
+		assert_ne!(
+			a0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.key_id,
+			a1.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.key_id
+		);
 		// it's still the same old bob's kyber ratchet (= bob kyber prekey) for alice
-		assert_eq!(a1.body().kyber_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, a0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id);
+		assert_eq!(
+			a1.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.payload
+				.encryption_key_id,
+			a0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.payload
+				.encryption_key_id
+		);
 
 		_ = bob.decrypt(&a1);
 
 		// here, bob will use alice's new kyber ratchet
-		let b0 = bob.encrypt(b"this goes with a new kyber encrypted ratchet by bob", Type::Chat);
+		let b0 = bob.encrypt(
+			b"this goes with a new kyber encrypted ratchet by bob",
+			Type::Chat,
+		);
 
 		assert!(b0.body().kyber_encrypted_ratchet_key.is_some());
 		assert!(b0.body().ratchet_key.is_none());
 		// as usual, no double encryption
-		assert_eq!(b0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().double_encrypted, false);
+		assert_eq!(
+			b0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.double_encrypted,
+			false
+		);
 		// bob's eph is encrypted with alice's most recent kyber ratchet
-		assert_eq!(b0.body().kyber_encrypted_ratchet_key.as_ref().unwrap().payload.encryption_key_id, alice.my_kyber_ratchet.as_ref().unwrap().public_key().id());
+		assert_eq!(
+			b0.body()
+				.kyber_encrypted_ratchet_key
+				.as_ref()
+				.unwrap()
+				.payload
+				.encryption_key_id,
+			alice.my_kyber_ratchet.as_ref().unwrap().public_key().id()
+		);
 
 		_ = alice.decrypt(&b0);
 
@@ -721,7 +919,10 @@ mod tests {
 
 		// and same for bob
 		_ = bob.decrypt(&a2);
-		let b1 = bob.encrypt(b"now, this goes with a plain ratchet by bob as well", Type::Chat);
+		let b1 = bob.encrypt(
+			b"now, this goes with a plain ratchet by bob as well",
+			Type::Chat,
+		);
 
 		assert!(b1.body().kyber_encrypted_ratchet_key.is_none());
 		assert!(b1.body().ratchet_key.is_some());
@@ -813,8 +1014,9 @@ mod tests {
 		let mut alice = alice_session();
 		let a0 = alice.encrypt(b"hi 0", Type::Chat);
 		let mut valid_messages: Vec<AxolotlMac> = (1..chain::MAX_KEYS_TO_SKIP + 1)
-				.into_iter()
-				.map(|ctr| alice.encrypt(format!("skipped {}", ctr).as_bytes(), Type::Chat)).collect();
+			.into_iter()
+			.map(|ctr| alice.encrypt(format!("skipped {}", ctr).as_bytes(), Type::Chat))
+			.collect();
 		let last_valid = valid_messages.pop().unwrap();
 		// this generates a message with a large counter
 		let invalid_msg = alice.encrypt(b"invalid", Type::Chat);
@@ -822,9 +1024,15 @@ mod tests {
 
 		// the very first message decrypts just fine for it has a small ctr
 		assert_eq!(bob.decrypt(&a0).unwrap(), b"hi 0");
-		assert_eq!(bob.decrypt(&invalid_msg).err(), Some(Error::TooManyKeySkipped));
+		assert_eq!(
+			bob.decrypt(&invalid_msg).err(),
+			Some(Error::TooManyKeySkipped)
+		);
 		// this last valid one decrypts just fine
-		assert_eq!(bob.decrypt(&last_valid).unwrap(), format!("skipped {}", chain::MAX_KEYS_TO_SKIP).as_bytes());
+		assert_eq!(
+			bob.decrypt(&last_valid).unwrap(),
+			format!("skipped {}", chain::MAX_KEYS_TO_SKIP).as_bytes()
+		);
 		// as well as this one, since we've just freed one slot to store
 		assert_eq!(bob.decrypt(&invalid_msg).unwrap(), b"invalid");
 
@@ -834,16 +1042,25 @@ mod tests {
 			let valid = alice.encrypt(format!("skipped {}", ctr).as_bytes(), Type::Chat);
 			// while the next one fails
 			let invalid = alice.encrypt(format!("failing {}", ctr).as_bytes(), Type::Chat);
-			
+
 			assert_eq!(bob.decrypt(&invalid).err(), Some(Error::TooManyKeySkipped));
 			// until there's a slot to process a skipped key
-			assert_eq!(bob.decrypt(&valid).unwrap(), format!("skipped {}", ctr).as_bytes());
-			assert_eq!(bob.decrypt(&invalid).unwrap(), format!("failing {}", ctr).as_bytes());
+			assert_eq!(
+				bob.decrypt(&valid).unwrap(),
+				format!("skipped {}", ctr).as_bytes()
+			);
+			assert_eq!(
+				bob.decrypt(&invalid).unwrap(),
+				format!("failing {}", ctr).as_bytes()
+			);
 		}
 
 		// but then, we can decrypt all those pending messages
 		valid_messages.iter().enumerate().for_each(|(i, msg)| {
-			assert_eq!(bob.decrypt(&msg).unwrap(), format!("skipped {}", i + 1).as_bytes());
+			assert_eq!(
+				bob.decrypt(&msg).unwrap(),
+				format!("skipped {}", i + 1).as_bytes()
+			);
 		});
 
 		// and encrypt/decrypt new messages within this same chain
@@ -893,7 +1110,7 @@ mod serialize {
 		BadSendChainKey,
 		BadReceiveChain,
 		BadFormat,
-		NoReceiveOnly
+		NoReceiveOnly,
 	}
 
 	impl TryFrom<u32> for Role {
@@ -903,13 +1120,22 @@ mod serialize {
 			match value {
 				0 => Ok(Self::Alice),
 				1 => Ok(Self::Bob),
-				_ => Err(Error::BadRole)
+				_ => Err(Error::BadRole),
 			}
 		}
 	}
 
-	use crate::{serializable::{Serializable, Deserializable}, proto, kyber::{KeyPairKyber, PublicKeyKyber}, x448::{KeyPairX448, PublicKeyX448}, key_exchange::KeyExchange, root_key::RootKey, chain_key::ChainKey, receive_chain::ReceiveChain};
-	use super::{Session, Role};
+	use super::{Role, Session};
+	use crate::{
+		chain_key::ChainKey,
+		key_exchange::KeyExchange,
+		kyber::{KeyPairKyber, PublicKeyKyber},
+		proto,
+		receive_chain::ReceiveChain,
+		root_key::RootKey,
+		serializable::{Deserializable, Serializable},
+		x448::{KeyPairX448, PublicKeyX448},
+	};
 	use prost::Message;
 
 	impl From<&Session> for proto::SessionState {
@@ -933,7 +1159,7 @@ mod serialize {
 				ratchet_counter: Some(src.ratchet_counter),
 				my_kyber_identity: src.my_kyber_identity.as_ref().map(|i| i.serialize()),
 				failed: Some(false),
-				receive_only: Some(src.receive_only)
+				receive_only: Some(src.receive_only),
 			}
 		}
 	}
@@ -945,40 +1171,77 @@ mod serialize {
 	}
 
 	impl TryFrom<proto::SessionState> for Session {
-    type Error = Error;
+		type Error = Error;
 
-    fn try_from(value: proto::SessionState) -> Result<Self, Self::Error> {
+		fn try_from(value: proto::SessionState) -> Result<Self, Self::Error> {
 			Ok(Self {
 				id: value.id.ok_or(Error::NoId)?,
-				role: value.role.map_or(Err(Error::NoRole), |r| Role::try_from(r))?,
+				role: value
+					.role
+					.map_or(Err(Error::NoRole), |r| Role::try_from(r))?,
 				receive_only: value.receive_only.ok_or(Error::NoReceiveOnly)?,
 				counter: value.counter.ok_or(Error::NoCounter)?,
 				prev_counter: value.prev_counter.ok_or(Error::NoPrevCounter)?,
 				ratchet_counter: value.ratchet_counter.ok_or(Error::NoRatchetCounter)?,
-				my_kyber_identity: value.my_kyber_identity.map_or(Ok(None), |i| Ok(Some(KeyPairKyber::deserialize(&i).or(Err(Error::BadMyKyberIdentity))?)))?,
-				my_ratchet: value.my_ratchet.map_or(Ok(None), |r| Ok(Some(KeyPairX448::deserialize(&r).or(Err(Error::BadMyRatchet))?)))?,
-				my_kyber_ratchet: value.my_ratchet_kyber_key.map_or(Ok(None), |i| Ok(Some(KeyPairKyber::deserialize(&i).or(Err(Error::BadMyKyberRatchet))?)))?,
-				their_ratchet: value.their_ratchet.map_or(Ok(None), |r| Ok(Some(PublicKeyX448::try_from(r).or(Err(Error::BadTheirRatchet))?)))?,
-				their_ratchet_kyber: PublicKeyKyber::try_from(value.their_ratchet_kyber_key.ok_or(Error::NoTheirRatchetKyber)?).or(Err(Error::BadTheirKyberRatchet))?,
-				unacked_key_exchange: value.key_exchange.map_or(Ok(None), |kex| Ok(Some(KeyExchange::try_from(kex).or(Err(Error::BadKeyExchange))?)))?,
-				root_key: RootKey::try_from(value.root_key.ok_or(Error::NoRootKey)?).or(Err(Error::BadRootKey))?,
-				send_chain_key: value.send_chain_key.map_or(Ok(None), |k| Ok(Some(ChainKey::try_from(k).or(Err(Error::BadSendChainKey))?)))?,
-				receive_chain: ReceiveChain::try_from(value.receive_chain).or(Err(Error::BadReceiveChain))?
+				my_kyber_identity: value.my_kyber_identity.map_or(Ok(None), |i| {
+					Ok(Some(
+						KeyPairKyber::deserialize(&i).or(Err(Error::BadMyKyberIdentity))?,
+					))
+				})?,
+				my_ratchet: value.my_ratchet.map_or(Ok(None), |r| {
+					Ok(Some(
+						KeyPairX448::deserialize(&r).or(Err(Error::BadMyRatchet))?,
+					))
+				})?,
+				my_kyber_ratchet: value.my_ratchet_kyber_key.map_or(Ok(None), |i| {
+					Ok(Some(
+						KeyPairKyber::deserialize(&i).or(Err(Error::BadMyKyberRatchet))?,
+					))
+				})?,
+				their_ratchet: value.their_ratchet.map_or(Ok(None), |r| {
+					Ok(Some(
+						PublicKeyX448::try_from(r).or(Err(Error::BadTheirRatchet))?,
+					))
+				})?,
+				their_ratchet_kyber: PublicKeyKyber::try_from(
+					value
+						.their_ratchet_kyber_key
+						.ok_or(Error::NoTheirRatchetKyber)?,
+				)
+				.or(Err(Error::BadTheirKyberRatchet))?,
+				unacked_key_exchange: value.key_exchange.map_or(Ok(None), |kex| {
+					Ok(Some(
+						KeyExchange::try_from(kex).or(Err(Error::BadKeyExchange))?,
+					))
+				})?,
+				root_key: RootKey::try_from(value.root_key.ok_or(Error::NoRootKey)?)
+					.or(Err(Error::BadRootKey))?,
+				send_chain_key: value.send_chain_key.map_or(Ok(None), |k| {
+					Ok(Some(ChainKey::try_from(k).or(Err(Error::BadSendChainKey))?))
+				})?,
+				receive_chain: ReceiveChain::try_from(value.receive_chain)
+					.or(Err(Error::BadReceiveChain))?,
 			})
-    }
-}
+		}
+	}
 
 	impl Deserializable for Session {
 		type Error = Error;
 
-		fn deserialize(buf: &[u8]) -> Result<Self, Self::Error> where Self: Sized {
+		fn deserialize(buf: &[u8]) -> Result<Self, Self::Error>
+		where
+			Self: Sized,
+		{
 			Self::try_from(proto::SessionState::decode(buf).or(Err(Error::BadFormat))?)
 		}
 	}
 
 	#[cfg(test)]
 	mod tests {
-    use crate::{serializable::{Serializable, Deserializable}, session::Session};
+		use crate::{
+			serializable::{Deserializable, Serializable},
+			session::Session,
+		};
 
 		#[test]
 		fn test_serialize_deserialize() {

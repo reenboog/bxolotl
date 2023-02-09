@@ -1,15 +1,15 @@
-use std::{collections::VecDeque};
-use crate::{chain::Chain, x448::PublicKeyX448, kyber::KeyPairKyber, proto};
+use crate::{chain::Chain, kyber::KeyPairKyber, proto, x448::PublicKeyX448};
+use std::collections::VecDeque;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ReceiveChain {
-	chains: VecDeque<Chain>
+	chains: VecDeque<Chain>,
 }
 
 impl ReceiveChain {
 	pub fn new() -> Self {
 		Self {
-			chains: VecDeque::new()
+			chains: VecDeque::new(),
 		}
 	}
 }
@@ -60,23 +60,31 @@ impl ReceiveChain {
 	// TODO: accept ratchet key id
 	pub fn chain_mut(&mut self, ratchet: &PublicKeyX448) -> Option<&mut Chain> {
 		// originally, the keys are compared, not ids
-		self.chains.iter_mut().find(|c| c.ratchet_key().id() == ratchet.id())
+		self.chains
+			.iter_mut()
+			.find(|c| c.ratchet_key().id() == ratchet.id())
 	}
 
 	pub fn kyber_key_pair(&self, id: u64) -> Option<&KeyPairKyber> {
-		self.chains.iter().flat_map(|c| c.kyber_ratchet_key()).find(|pk| pk.public_key().id() == id)
+		self.chains
+			.iter()
+			.flat_map(|c| c.kyber_ratchet_key())
+			.find(|pk| pk.public_key().id() == id)
 	}
 }
 
 impl From<&ReceiveChain> for Vec<proto::session_state::Chain> {
 	fn from(src: &ReceiveChain) -> Self {
-		src.chains.iter().map(|c| c.into()).collect::<Vec<proto::session_state::Chain>>()
+		src.chains
+			.iter()
+			.map(|c| c.into())
+			.collect::<Vec<proto::session_state::Chain>>()
 	}
 }
 
 #[derive(Debug)]
 pub enum Error {
-	BadChain
+	BadChain,
 }
 
 impl TryFrom<Vec<proto::session_state::Chain>> for ReceiveChain {
@@ -87,7 +95,7 @@ impl TryFrom<Vec<proto::session_state::Chain>> for ReceiveChain {
 			chains: value
 				.into_iter()
 				.map(|c| Chain::try_from(c).or(Err(Error::BadChain)))
-				.collect::<Result<VecDeque<Chain>, Error>>()?
+				.collect::<Result<VecDeque<Chain>, Error>>()?,
 		})
 	}
 }
