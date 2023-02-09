@@ -503,4 +503,334 @@ mod tests {
 		//  }
 		// }
 	}
+
+	use super::*;
+	use crate::prekey;
+	use std::collections::{HashMap, HashSet, VecDeque};
+	use std::sync::Mutex;
+
+	struct NodeIdSecrets {
+		x448_identity: KeyPairX448,
+		ed448_identity: KeyPairEd448,
+		kyber_identity: KeyPairKyber,
+
+		prekeys: HashMap<u64, Prekey>,
+		signed_prekey: SignedKeyPair,
+	}
+
+	type NodeIdData = (NodeIdSecrets, Vec<FetchedPrekeyBundle>);
+
+	fn generate_node_id_data() -> NodeIdData {
+		let ed448_identity = KeyPairEd448::generate();
+		let secrets = NodeIdSecrets {
+			x448_identity: KeyPairX448::generate(),
+			ed448_identity: ed448_identity.clone(),
+			kyber_identity: KeyPairKyber::generate(),
+
+			prekeys: {
+				let prekeys = prekey::generate(10, true);
+				prekeys.into_iter().map(|x| (x.id(), x)).collect()
+			},
+			signed_prekey: {
+				let key_pair = KeyPairX448::generate();
+				let signature = ed448_identity
+					.private_key()
+					.sign(key_pair.public_key().as_bytes());
+
+				SignedKeyPair::new(
+					key_pair.private_key().clone(),
+					SignedPublicKeyX448::new(key_pair.public_key().clone(), signature),
+				)
+			},
+		};
+
+		let prekey_bundles = secrets
+			.prekeys
+			.iter()
+			.map(|(_, prekey)| {
+				let bundle = FetchedPrekeyBundle {
+					prekey_x448: prekey.key_x448.public_key().clone(),
+					prekey_kyber: prekey.key_kyber.public_key().clone(),
+					signed_prekey_x448: secrets.signed_prekey.public().clone(),
+					identity: IdentityKeys {
+						x448: secrets.x448_identity.public_key().clone(),
+						ed448: secrets.ed448_identity.public_key().clone(),
+						kyber: secrets.kyber_identity.public_key().clone(),
+					},
+				};
+				bundle
+			})
+			.collect();
+
+		(secrets, prekey_bundles)
+	}
+
+	struct TestStorageData {
+		secrets: NodeIdSecrets,
+		sessions_by_id: HashMap<u64, Session>,
+		active_sessions: HashMap<String, u64>,
+		receive_only_sessions: HashMap<String, HashSet<u64>>,
+		identity_keys: HashMap<String, IdentityKeys>,
+	}
+
+	impl TestStorageData {
+		pub fn new(secrets: NodeIdSecrets) -> Self {
+			Self {
+				secrets,
+				sessions_by_id: HashMap::new(),
+				active_sessions: HashMap::new(),
+				receive_only_sessions: HashMap::new(),
+				identity_keys: HashMap::new(),
+			}
+		}
+	}
+
+	struct TestStorage(Mutex<TestStorageData>);
+
+	impl TestStorage {
+		pub fn new(secrets: NodeIdSecrets) -> Self {
+			Self(Mutex::new(TestStorageData::new(secrets)))
+		}
+	}
+
+	impl super::Storage for TestStorage {
+		fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+			let data = self.0.lock().unwrap();
+			data.active_sessions
+				.get(nid)
+				.and_then(|x| data.sessions_by_id.get(x).map(|x| x.clone()))
+		}
+
+		fn get_session_by_id(&self, _nid: &str, id: u64) -> Option<Session> {
+			let data = self.0.lock().unwrap();
+			data.sessions_by_id.get(&id).map(|x| x.clone())
+		}
+
+		fn clear_all_sessions_for_nid(&self, nid: &str) {
+			let mut data = self.0.lock().unwrap();
+			let active_session = data.active_sessions.remove(nid);
+			let receive_only_sessions = data.receive_only_sessions.remove(nid);
+
+			if let Some(session_id) = active_session {
+				data.sessions_by_id.remove(&session_id);
+			}
+			if let Some(session_ids) = receive_only_sessions {
+				for session_id in session_ids {
+					data.sessions_by_id.remove(&session_id);
+				}
+			}
+		}
+
+		fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+			let mut data = self.0.lock().unwrap();
+			if receive_only {
+				let active_session_id = data.active_sessions.get(nid);
+				if let Some(active_session_id) = active_session_id {
+					if *active_session_id == id {
+						data.active_sessions.remove(nid);
+					}
+				}
+				data.receive_only_sessions
+					.entry(nid.into())
+					.or_default()
+					.insert(id);
+			} else {
+				*data.active_sessions.entry(nid.into()).or_default() = id;
+				data.receive_only_sessions
+					.entry(nid.into())
+					.or_default()
+					.remove(&id);
+			}
+			use std::collections::hash_map::Entry::*;
+			match data.sessions_by_id.entry(id) {
+				Occupied(mut entry) => {
+					entry.insert(session);
+				}
+				Vacant(entry) => {
+					entry.insert(session);
+				}
+			}
+		}
+
+		fn get_my_x448_identity(&self) -> Option<KeyPairX448> {
+			Some(self.0.lock().unwrap().secrets.x448_identity.clone())
+		}
+		fn get_my_ed448_identity(&self) -> Option<KeyPairEd448> {
+			Some(self.0.lock().unwrap().secrets.ed448_identity.clone())
+		}
+		fn get_my_kyber_identity(&self) -> Option<KeyPairKyber> {
+			Some(self.0.lock().unwrap().secrets.kyber_identity.clone())
+		}
+
+		fn get_identity_keys_for_nid(&self, nid: &str) -> Option<IdentityKeys> {
+			let data = self.0.lock().unwrap();
+			data.identity_keys.get(nid).map(|x| x.clone())
+		}
+		fn save_identity_keys_for_nid(&self, identity: &IdentityKeys, nid: &str) {
+			let mut data = self.0.lock().unwrap();
+			data.identity_keys
+				.entry(nid.into())
+				.or_insert_with(|| identity.clone());
+		}
+
+		fn get_prekey(&self, id: u64) -> Option<Prekey> {
+			let data = self.0.lock().unwrap();
+			data.secrets.prekeys.get(&id).map(|x| x.clone())
+		}
+
+		fn delete_prekey(&self, id: u64) {
+			let mut data = self.0.lock().unwrap();
+			data.secrets.prekeys.remove(&id);
+		}
+
+		fn get_signed_prekey(&self, _id: u64) -> Option<SignedKeyPair> {
+			Some(self.0.lock().unwrap().secrets.signed_prekey.clone())
+		}
+	}
+
+	struct TestApis {
+		prekey_bundles: Mutex<HashMap<String, VecDeque<FetchedPrekeyBundle>>>,
+	}
+
+	impl TestApis {
+		pub fn new(
+			nid: &str,
+			prekey_bundles: impl IntoIterator<Item = FetchedPrekeyBundle>,
+		) -> Self {
+			Self {
+				prekey_bundles: Mutex::new(
+					[(nid.into(), prekey_bundles.into_iter().collect())].into(),
+				),
+			}
+		}
+	}
+
+	#[async_trait]
+	impl super::Apis for TestApis {
+		async fn fetch_prekey(
+			&self,
+			nid: &str,
+			_auth_nid: &str,
+			_auth_token: &str,
+		) -> Result<FetchedPrekeyBundle, Error> {
+			match self.prekey_bundles.lock().unwrap().get_mut(nid) {
+				Some(ref mut bundles) => match bundles.pop_front() {
+					Some(bundle) => Ok(bundle),
+					None => Err(Error::NoPrekeyFound),
+				},
+				None => Err(Error::NoPrekeysForUser),
+			}
+		}
+	}
+
+	fn create_test_cryptors(
+		node_id0: &str,
+		node_id1: &str,
+	) -> (
+		Cryptor<TestStorage, TestApis>,
+		Cryptor<TestStorage, TestApis>,
+	) {
+		let node_id_data = (generate_node_id_data(), generate_node_id_data());
+		let node_storage = (
+			TestStorage::new(node_id_data.0 .0),
+			TestStorage::new(node_id_data.1 .0),
+		);
+		let node_apis = (
+			TestApis::new(node_id1, node_id_data.1 .1),
+			TestApis::new(node_id0, node_id_data.0 .1),
+		);
+
+		(
+			Cryptor::new(Arc::new(node_storage.0), Arc::new(node_apis.0)),
+			Cryptor::new(Arc::new(node_storage.1), Arc::new(node_apis.1)),
+		)
+	}
+
+	// WARNING: this test fails with stack overflow on default stack size (2MB) in debug mode
+	// In order to run tests properly you should do:
+	// env RUST_MIN_STACK=4194304 cargo test
+	#[tokio::test]
+	async fn test_simultaneous_session_creation() {
+		let peer0_nid = "abcdef01:1";
+		let peer1_nid = "abcdef02:1";
+		let (peer0, peer1) = create_test_cryptors(peer0_nid, peer1_nid);
+
+		let before_peer0 = peer0
+			.encrypt(b"before", Type::Chat, peer1_nid, peer0_nid, "token", false)
+			.await
+			.unwrap();
+		let before_peer1 = peer1
+			.encrypt(b"before", Type::Chat, peer0_nid, peer1_nid, "token", false)
+			.await
+			.unwrap();
+		let before2_peer0 = peer0
+			.encrypt(b"before2", Type::Chat, peer1_nid, peer0_nid, "token", false)
+			.await
+			.unwrap();
+		let before2_peer1 = peer1
+			.encrypt(b"before2", Type::Chat, peer0_nid, peer1_nid, "token", false)
+			.await
+			.unwrap();
+
+		assert_eq!(
+			peer1
+				.decrypt(&before_peer0, peer0_nid, peer1_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"before"
+		);
+		assert_eq!(
+			peer0
+				.decrypt(&before_peer1, peer1_nid, peer0_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"before"
+		);
+
+		let after_peer0 = peer0
+			.encrypt(b"after", Type::Chat, peer1_nid, peer0_nid, "token", false)
+			.await
+			.unwrap();
+		let after_peer1 = peer1
+			.encrypt(b"after", Type::Chat, peer0_nid, peer1_nid, "token", false)
+			.await
+			.unwrap();
+
+		assert_eq!(
+			peer1
+				.decrypt(&after_peer0, peer0_nid, peer1_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"after"
+		);
+		assert_eq!(
+			peer0
+				.decrypt(&after_peer1, peer1_nid, peer0_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"after"
+		);
+
+		// Check out-of-order messages
+		assert_eq!(
+			peer1
+				.decrypt(&before2_peer0, peer0_nid, peer1_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"before2"
+		);
+		assert_eq!(
+			peer0
+				.decrypt(&before2_peer1, peer1_nid, peer0_nid)
+				.await
+				.unwrap()
+				.msg,
+			b"before2"
+		);
+	}
 }
