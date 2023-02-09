@@ -1,8 +1,23 @@
-use std::{sync::Arc, fmt::Display};
+use std::{fmt::Display, sync::Arc};
 
+use crate::{
+	ed448::KeyPairEd448,
+	identity_keys::IdentityKeys,
+	job_queue,
+	kyber::{
+		self, DecryptionMode::Double, KeyBundle, KeyPairKyber, PrivateKeyKyber, PublicKeyKyber,
+	},
+	mac::AxolotlMac,
+	message::Type,
+	prekey::Prekey,
+	serializable::{Deserializable, Serializable},
+	session::{self, Session},
+	signed_key_pair::SignedKeyPair,
+	signed_public_key::SignedPublicKeyX448,
+	x448::{KeyPairX448, PublicKeyX448},
+};
 use async_trait::async_trait;
 use prost::encoding::bool;
-use crate::{prekey::Prekey, session::{Session, self}, mac::AxolotlMac, serializable::{Deserializable, Serializable}, x448::{KeyPairX448, PublicKeyX448}, kyber::{KeyPairKyber, KeyBundle, self, PrivateKeyKyber, DecryptionMode::Double, PublicKeyKyber}, signed_key_pair::SignedKeyPair, message::Type, ed448::{KeyPairEd448}, signed_public_key::SignedPublicKeyX448, identity_keys::IdentityKeys, job_queue};
 
 /*
 
@@ -19,7 +34,8 @@ pub trait Storage {
 	// TODO: should be result to include the "DB is locked" case
 	fn get_active_session_for_nid(&self, nid: &str) -> Option<Session>;
 	/// Returns any session, whether active or receive_only
-	fn get_session_by_id(&self, id: u64) -> Option<Session>;
+	/// `nid` parameter has to be checked otherwise it's possible to bypass identity checks.
+	fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session>;
 
 	/// Clears active and receive_only sessions, if any
 	fn clear_all_sessions_for_nid(&self, nid: &str); // TODO: result?
