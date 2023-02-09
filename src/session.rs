@@ -92,8 +92,6 @@ pub struct Session {
 	receive_chain: ReceiveChain
 }
 
-unsafe impl Send for Session {}
-
 impl Session {
 	pub fn id(&self) -> u64 {
 		self.id
