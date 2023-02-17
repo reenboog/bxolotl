@@ -1,13 +1,12 @@
-use crate::{key_pair::{KeyPairSize, KeyPair}, private_key::PrivateKey, public_key::PublicKey};
-
-#[derive(Debug)]
-pub enum Error {
-	WrongLen
-}
+use crate::{
+	key_pair::{KeyPair, KeyPairSize},
+	private_key::PrivateKey,
+	public_key::PublicKey,
+};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Signature {
-	bytes: [u8; Self::SIZE]
+	bytes: [u8; Self::SIZE],
 }
 
 impl Signature {
@@ -23,10 +22,10 @@ impl Signature {
 }
 
 impl TryFrom<Vec<u8>> for Signature {
-	type Error = Error;
+	type Error = std::array::TryFromSliceError;
 
 	fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-		Ok(Self::new(value.try_into().or(Err(Error::WrongLen))?))
+		Ok(Self::new(value.as_slice().try_into()?))
 	}
 }
 
@@ -53,16 +52,16 @@ impl KeyPairEd448 {
 
 impl PrivateKeyEd448 {
 	pub fn generate() -> Self {
-		use ed448_rust::{PrivateKey};
+		use ed448_rust::PrivateKey;
 
 		let mut csprng = rand::thread_rng();
 		let private = PrivateKey::new(&mut csprng);
 
 		private.as_bytes().into()
 	}
-	
+
 	pub fn sign(&self, msg: &[u8]) -> Signature {
-		use ed448_rust::{PrivateKey};
+		use ed448_rust::PrivateKey;
 
 		let private = PrivateKey::from(self);
 		let signature = private.sign(msg, None).unwrap();
@@ -87,7 +86,7 @@ impl TryFrom<&PublicKeyEd448> for ed448_rust::PublicKey {
 
 impl PublicKeyEd448 {
 	pub fn verify(&self, msg: &[u8], signature: &Signature) -> bool {
-		use ed448_rust::{PublicKey};
+		use ed448_rust::PublicKey;
 
 		if let Ok(public) = PublicKey::try_from(self) {
 			public.verify(msg, signature.as_bytes(), None).is_ok()
@@ -108,7 +107,7 @@ impl PublicKeyEd448 {
 
 #[cfg(test)]
 mod tests {
-	use super::{PublicKeyEd448, Signature, KeyPairEd448, PrivateKeyEd448};
+	use super::{KeyPairEd448, PrivateKeyEd448, PublicKeyEd448, Signature};
 
 	#[test]
 	fn test_from_private() {
@@ -124,7 +123,8 @@ mod tests {
 		let msg = b"\x0c\x3e\x54\x40\x74\xec\x63\xb0\x26\x5e\x0c";
 		let signature = b"\x1f\x0a\x88\x88\xce\x25\xe8\xd4\x58\xa2\x11\x30\x87\x9b\x84\x0a\x90\x89\xd9\x99\xaa\xba\x03\x9e\xaf\x3e\x3a\xfa\x09\x0a\x09\xd3\x89\xdb\xa8\x2c\x4f\xf2\xae\x8a\xc5\xcd\xfb\x7c\x55\xe9\x4d\x5d\x96\x1a\x29\xfe\x01\x09\x94\x1e\x00\xb8\xdb\xde\xea\x6d\x3b\x05\x10\x68\xdf\x72\x54\xc0\xcd\xc1\x29\xcb\xe6\x2d\xb2\xdc\x95\x7d\xbb\x47\xb5\x1f\xd3\xf2\x13\xfb\x86\x98\xf0\x64\x77\x42\x50\xa5\x02\x89\x61\xc9\xbf\x8f\xfd\x97\x3f\xe5\xd5\xc2\x06\x49\x2b\x14\x0e\x00";
 
-		assert!(PublicKeyEd448::new(public.to_owned()).verify(msg, &Signature::new(signature.to_owned())));
+		assert!(PublicKeyEd448::new(public.to_owned())
+			.verify(msg, &Signature::new(signature.to_owned())));
 	}
 
 	#[test]
@@ -133,7 +133,12 @@ mod tests {
 		let msg = b"\x0c\x3e\x54\x40\x74\xec\x63\xb0\x26\x5e\x0c";
 		let signature = b"\x1f\x0a\x88\x88\xce\x25\xe8\xd4\x58\xa2\x11\x30\x87\x9b\x84\x0a\x90\x89\xd9\x99\xaa\xba\x03\x9e\xaf\x3e\x3a\xfa\x09\x0a\x09\xd3\x89\xdb\xa8\x2c\x4f\xf2\xae\x8a\xc5\xcd\xfb\x7c\x55\xe9\x4d\x5d\x96\x1a\x29\xfe\x01\x09\x94\x1e\x00\xb8\xdb\xde\xea\x6d\x3b\x05\x10\x68\xdf\x72\x54\xc0\xcd\xc1\x29\xcb\xe6\x2d\xb2\xdc\x95\x7d\xbb\x47\xb5\x1f\xd3\xf2\x13\xfb\x86\x98\xf0\x64\x77\x42\x50\xa5\x02\x89\x61\xc9\xbf\x8f\xfd\x97\x3f\xe5\xd5\xc2\x06\x49\x2b\x14\x0e\x00";
 
-		assert_eq!(PrivateKeyEd448::new(private.to_owned()).sign(msg).as_bytes(), signature);
+		assert_eq!(
+			PrivateKeyEd448::new(private.to_owned())
+				.sign(msg)
+				.as_bytes(),
+			signature
+		);
 	}
 
 	#[test]

@@ -1,10 +1,10 @@
-use sha2::Sha256;
 use hmac::{Hmac, Mac};
+use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
 // TODO: introduce a more generic Key? size?
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Key([u8; Self::SIZE]);
 
 impl Key {
