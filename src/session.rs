@@ -369,7 +369,6 @@ impl Session {
 		Ok(None)
 	}
 
-	// TODO: return Result
 	pub fn decrypt(&mut self, mac: &AxolotlMac) -> Result<Vec<u8>, Error> {
 		let msg = mac.body();
 		let purported_ratchet: PublicKeyX448; // TODO: can I get rid of this?
@@ -401,17 +400,16 @@ impl Session {
 		if let Some(ref my_kyber) = self.my_kyber_ratchet {
 			new_chain.set_kyber_ratchet_key(my_kyber.clone());
 		} else if let Some(ref current) = current {
-			new_chain.set_kyber_ratchet_key(current.kyber_ratchet_key().as_ref().unwrap().clone());
-			// TODO: don't hard unwrap
+			new_chain.set_kyber_ratchet_key(current.kyber_ratchet_key().as_ref().ok_or(Error::NoLocalKyber).cloned()?);
 		}
 
-		let next = new_chain.stage(msg.counter()).unwrap(); // TODO: don't hard unwrap
+		let next = new_chain.stage(msg.counter())?;
 
 		let decrypted = next.message_key().decrypt(mac)?;
 		next.commit();
 
 		if let Some(current) = current {
-			current.stage(msg.prev_counter()).unwrap().commit(); // TODO: don't hard unwrap
+			current.stage(msg.prev_counter())?.commit();
 		}
 
 		self.receive_chain.set_current(new_chain);
