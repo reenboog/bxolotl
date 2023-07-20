@@ -475,9 +475,10 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 }
 
 // TODO: rename & move somewhere else
-fn should_be_alice(my_nid: &str, nid: &str) -> bool {
+pub fn should_be_alice(my_nid: &str, nid: &str) -> bool {
 	my_nid < nid
 }
+
 #[cfg(test)]
 mod tests {
 	use crate::cryptor::should_be_alice;
