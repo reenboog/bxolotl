@@ -153,7 +153,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
 	/// Protobuf encoding error; ignore the message
 	BadMacFormat = 1,
@@ -167,21 +167,23 @@ pub enum Error {
 	IdentityDoesNotMatch = 5,
 	/// A stale signed key is used; reset
 	NoSignedPrekeyFound = 6,
+	/// The supplied signed prekey failed to verify
+	SignedPrekeyForged = 7,
 	/// A prekey has already been used by someone else (quite impossible) or there was a crash previously; reset
-	NoPrekeyFound = 7,
+	NoPrekeyFound = 8,
 	/// ephemeral_key was encrypted only once or first_key/second_key order was not respected
-	BadKyberEncryptedEphemeral = 8,
+	BadKyberEncryptedEphemeral = 9,
 	/// No session found for given nid; reset
-	NoSessionFound = 9,
+	NoSessionFound = 10,
 	/// Current session is corrupted; reset
 	// TODO: rename, make less generic
-	WrongMac = 10,
+	WrongMac = 11,
 	/// No user exists or authentication failure; fail, no recovery
-	NoPrekeysForUser = 11,
+	NoPrekeysForUser = 12,
 	/// A prekey was fetched, but it's of unknown format; fail and ignore
-	BadPrekeyFormat = 12,
+	BadPrekeyFormat = 13,
 	/// A generic network error; try again later
-	NoNetwork = 13,
+	NoNetwork = 14,
 }
 
 impl Display for Error {
@@ -421,6 +423,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			let my_kyber_ratchet = KeyPairKyber::generate();
 			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token).await?; // TODO: respect UserDoesNotExist + network errors
 
+			// TOFU (https://datatracker.ietf.org/doc/html/rfc7435.html) the initiator's identity for later use
 			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid).await {
 				if identity.x448 != bundle.identity.x448
 					|| identity.kyber != bundle.identity.kyber
@@ -432,6 +435,11 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				self.storage
 					.save_identity_keys_for_nid(&bundle.identity, nid)
 					.await;
+			}
+
+			// verify the signed prekey now
+			if !bundle.signed_prekey_x448.verify(&bundle.identity.ed448) {
+				return Err(Error::SignedPrekeyForged);
 			}
 
 			let session = Session::alice(
@@ -745,6 +753,35 @@ mod tests {
 			Cryptor::new(Arc::new(node_storage.0), Arc::new(node_apis.0)),
 			Cryptor::new(Arc::new(node_storage.1), Arc::new(node_apis.1)),
 		)
+	}
+
+	#[tokio::test]
+	async fn test_fail_session_init_for_forged_prekey() {
+		let alice_nid = "aaaaaaaa:1";
+		let bob_nid = "bbbbbbbb:1";
+		let (alice_secrets, _) = generate_node_id_data();
+		let alice_storage = TestStorage::new(alice_secrets);
+
+		// pretend the backend forged bob's signed prekey
+		let (_, mut bob_prekeys) = generate_node_id_data();
+		bob_prekeys.iter_mut().for_each(|pk| {
+			let fake_identity = KeyPairEd448::generate();
+			let key_pair = KeyPairX448::generate();
+			let signature = fake_identity
+				.private_key()
+				.sign(key_pair.public_key().as_bytes());
+
+			pk.signed_prekey_x448 =
+				SignedPublicKeyX448::new(key_pair.public_key().clone(), signature);
+		});
+
+		let alice_api = TestApis::new(bob_nid, bob_prekeys);
+		let cryptor = Cryptor::new(Arc::new(alice_storage), Arc::new(alice_api));
+
+		// and now it fails
+		assert_eq!(Err(Error::SignedPrekeyForged), cryptor
+			.encrypt(b"124", Type::Chat, bob_nid, alice_nid, "token", false)
+			.await);
 	}
 
 	// WARNING: this test fails with stack overflow on default stack size (2MB) in debug mode

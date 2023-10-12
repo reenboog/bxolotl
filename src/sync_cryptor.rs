@@ -2,11 +2,10 @@ use std::sync::Arc;
 
 use prost::encoding::bool;
 
+use crate::cryptor::{should_be_alice, Apis, Decrypted, Error, Storage};
 use crate::{
 	job_queue,
-	kyber::{
-		self, DecryptionMode::Double, KeyBundle, KeyPairKyber, PrivateKeyKyber,
-	},
+	kyber::{self, DecryptionMode::Double, KeyBundle, KeyPairKyber, PrivateKeyKyber},
 	mac::AxolotlMac,
 	message::Type,
 	prekey::Prekey,
@@ -14,7 +13,6 @@ use crate::{
 	session::{self, Session},
 	x448::KeyPairX448,
 };
-use crate::cryptor::{Apis, Decrypted, Error, should_be_alice, Storage};
 
 pub struct Cryptor<S, A> {
 	storage: Arc<S>,
@@ -157,8 +155,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			let id = session.id();
 			// it could be either active or receive_only session
 			let receive_only = session.receive_only();
-			self.storage
-				.save_session(session, nid, id, receive_only);
+			self.storage.save_session(session, nid, id, receive_only);
 
 			// TODO: session itself could keep Option<prekey_id> and clear it per each decryption, if required
 			if let Some(id) = mac
@@ -231,6 +228,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			let my_kyber_ratchet = KeyPairKyber::generate();
 			let bundle = self.apis.fetch_prekey(nid, my_nid, auth_token).await?; // TODO: respect UserDoesNotExist + network errors
 
+			// TOFU (https://datatracker.ietf.org/doc/html/rfc7435.html) the initiator's identity for later use
 			if let Some(identity) = self.storage.get_identity_keys_for_nid(nid) {
 				if identity.x448 != bundle.identity.x448
 					|| identity.kyber != bundle.identity.kyber
@@ -241,6 +239,11 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			} else {
 				self.storage
 					.save_identity_keys_for_nid(&bundle.identity, nid);
+			}
+
+			// verify the signed prekey now
+			if !bundle.signed_prekey_x448.verify(&bundle.identity.ed448) {
+				return Err(Error::SignedPrekeyForged);
 			}
 
 			let session = Session::alice(
@@ -273,8 +276,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		let receive_only = session.receive_only();
 
 		// can be session.receive_only instead of false (its guaranteed to be that way)
-		self.storage
-			.save_session(session, nid, id, receive_only);
+		self.storage.save_session(session, nid, id, receive_only);
 		// Desktop keeps restarting indefinitely if encrypt throws, but it can't fail now
 
 		return Ok(ciphertext.serialize());
