@@ -214,6 +214,18 @@ pub struct FetchedPrekeyBundle {
 // TODO: reuse ccl's existing Nid type
 
 impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
+	// decrypts a list of (mac, nid) sent to my nid returning a list of resutls
+	pub async fn decrypt_batched(&self, macs: Vec<(&[u8], &str)>, my_nid: &str) -> Vec<Result<Decrypted, Error>> {
+		let mut results = Vec::new();
+
+    for (mac, nid) in macs {
+			results.push(self.decrypt(mac, nid, my_nid).await);
+    }
+
+    results
+	}
+
+	// decrypts a mac from nid sent to my_nid
 	pub async fn decrypt(&self, mac: &[u8], nid: &str, my_nid: &str) -> Result<Decrypted, Error> {
 		self.tasks
 			.push(nid.to_string(), || self.decrypt_msg(mac, nid, my_nid))
