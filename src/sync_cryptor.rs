@@ -13,11 +13,20 @@ use crate::{
 	session::{self, Session},
 	x448::KeyPairX448,
 };
+use tokio::sync::Mutex;
 
 pub struct Cryptor<S, A> {
 	storage: Arc<S>,
 	apis: Arc<A>,
 	tasks: job_queue::Queue<String>,
+	// there could be up to two sessions per nid in case of wrong Alice, hence Vec instead of HashMap
+	session_cache: Arc<Mutex<Vec<CachedSession>>>,
+}
+
+// wraps Session with nid
+struct CachedSession {
+	nid: String,
+	session: Session,
 }
 
 impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
@@ -26,11 +35,61 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			storage,
 			apis,
 			tasks: job_queue::Queue::new(),
+			session_cache: Arc::new(Mutex::new(Vec::new())),
 		}
 	}
 }
 
 impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
+	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session> {
+		let mut cache = self.session_cache.lock().await;
+
+		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.id() == id) {
+			Some(session.session.clone())
+		} else if let Some(session) = self.storage.get_session_by_id(nid, id) {
+			cache.push(CachedSession { nid: nid.to_string(), session: session.clone() });
+
+			Some(session)
+		} else  {
+			None
+		}
+	}
+
+	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+		let mut cache = self.session_cache.lock().await;
+
+		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.receive_only() == false) {
+			Some(session.session.clone())
+		} else if let Some(session) = self.storage.get_active_session_for_nid(nid) {
+			cache.push(CachedSession { nid: nid.to_string(), session: session.clone() });
+
+			Some(session)
+		} else {
+			None
+		}
+	}
+
+	async fn clear_all_sessions_for_nid(&self, nid: &str) {
+		let mut cache = self.session_cache.lock().await;
+
+		cache.retain(|s| s.nid != nid);
+
+		self.storage.clear_all_sessions_for_nid(nid)
+	}
+
+	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+		let mut cache = self.session_cache.lock().await;
+		let to_cache = CachedSession { nid: nid.to_string(), session: session.clone() };
+
+		if let Some(idx) = cache.iter().position(|s| s.session.id() == id && s.nid == nid) {
+			cache[idx] = to_cache;
+		} else {
+			cache.push(to_cache);
+		}
+		
+		self.storage.save_session(session, nid, id, receive_only);
+	}
+
 	// decrypts a list of (mac, nid) sent to my nid returning a list of resutls
 	pub async fn decrypt_batched(&self, macs: Vec<(&[u8], &str)>, my_nid: &str) -> Vec<Result<Decrypted, Error>> {
 		let mut results = Vec::new();
@@ -55,8 +114,8 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		// a new session is being initiated (doesn't mean it's the first message though)
 		if let Some(ref kex) = mac.body().key_exchange {
 			// this can be both, active and receive_only session – does not matter at this point
-			if let Some(session) = self.storage.get_session_by_id(nid, kex.id()) {
-				self.decrypt_with_session(session, mac, nid)
+			if let Some(session) = self.get_session_by_id(nid, kex.id()).await {
+				self.decrypt_with_session(session, mac, nid).await
 			} else {
 				let identity = self
 					.storage
@@ -115,46 +174,46 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 
 				// TODO: check current.has_receive only first? –if yes, clear as well
 				if kex.force_reset {
-					self.storage.clear_all_sessions_for_nid(nid);
-					self.decrypt_with_session(session, mac, nid)
+					self.clear_all_sessions_for_nid(nid).await;
+					self.decrypt_with_session(session, mac, nid).await
 				} else {
 					// do I have any other session for this nid?
-					if let Some(current) = self.storage.get_active_session_for_nid(nid) {
+					if let Some(current) = self.get_active_session_for_nid(nid).await {
 						if current.role() == session::Role::Alice {
 							if should_be_alice(my_nid, nid) {
 								// the sender is considering herself Alice (but they'll fix themselves eventually), so keep
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
 								session.set_receive_only();
 
-								self.decrypt_with_session(session, mac, nid)
+								self.decrypt_with_session(session, mac, nid).await
 							} else {
 								// I was Alice, but at the same time some one initiated a session and I actually should be Bob
 								// now, I'll delete my session and will use the new one
-								self.storage.clear_all_sessions_for_nid(nid);
-								self.decrypt_with_session(session, mac, nid)
+								self.clear_all_sessions_for_nid(nid).await;
+								self.decrypt_with_session(session, mac, nid).await
 							}
 						} else {
 							// I'm bob already, but from now on, I should be using this new session only
-							self.storage.clear_all_sessions_for_nid(nid);
-							self.decrypt_with_session(session, mac, nid)
+							self.clear_all_sessions_for_nid(nid).await;
+							self.decrypt_with_session(session, mac, nid).await
 						}
 					} else {
 						// this is a new and the only session, so proceed normally: decrypt, save, etc
-						self.decrypt_with_session(session, mac, nid)
+						self.decrypt_with_session(session, mac, nid).await
 					}
 				}
 			}
 		} else {
-			if let Some(current) = self.storage.get_active_session_for_nid(nid) {
+			if let Some(current) = self.get_active_session_for_nid(nid).await {
 				// at this point, it could be save to delete any receive_only sessions, if any
-				self.decrypt_with_session(current, mac, nid)
+				self.decrypt_with_session(current, mac, nid).await
 			} else {
 				Err(Error::NoSessionFound)
 			}
 		}
 	}
 
-	fn decrypt_with_session(
+	async fn decrypt_with_session(
 		&self,
 		mut session: Session,
 		mac: AxolotlMac,
@@ -166,7 +225,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 			let id = session.id();
 			// it could be either active or receive_only session
 			let receive_only = session.receive_only();
-			self.storage.save_session(session, nid, id, receive_only);
+			self.save_session(session, nid, id, receive_only).await;
 
 			// TODO: session itself could keep Option<prekey_id> and clear it per each decryption, if required
 			if let Some(id) = mac
@@ -183,7 +242,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				_type: mac.body()._type,
 			})
 		} else {
-			self.storage.clear_all_sessions_for_nid(nid);
+			self.clear_all_sessions_for_nid(nid).await;
 
 			Err(Error::WrongMac)
 		}
