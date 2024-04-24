@@ -236,10 +236,13 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.id() == id) {
 			Some(session.session.clone())
 		} else if let Some(session) = self.storage.get_session_by_id(nid, id).await {
-			cache.push(CachedSession { nid: nid.to_string(), session: session.clone() });
+			cache.push(CachedSession {
+				nid: nid.to_string(),
+				session: session.clone(),
+			});
 
 			Some(session)
-		} else  {
+		} else {
 			None
 		}
 	}
@@ -247,10 +250,16 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
 		let mut cache = self.session_cache.lock().await;
 
-		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.receive_only() == false) {
+		if let Some(session) = cache
+			.iter()
+			.find(|s| s.nid == nid && s.session.receive_only() == false)
+		{
 			Some(session.session.clone())
 		} else if let Some(session) = self.storage.get_active_session_for_nid(nid).await {
-			cache.push(CachedSession { nid: nid.to_string(), session: session.clone() });
+			cache.push(CachedSession {
+				nid: nid.to_string(),
+				session: session.clone(),
+			});
 
 			Some(session)
 		} else {
@@ -268,26 +277,38 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 
 	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
 		let mut cache = self.session_cache.lock().await;
-		let to_cache = CachedSession { nid: nid.to_string(), session: session.clone() };
+		let to_cache = CachedSession {
+			nid: nid.to_string(),
+			session: session.clone(),
+		};
 
-		if let Some(idx) = cache.iter().position(|s| s.session.id() == id && s.nid == nid) {
+		if let Some(idx) = cache
+			.iter()
+			.position(|s| s.session.id() == id && s.nid == nid)
+		{
 			cache[idx] = to_cache;
 		} else {
 			cache.push(to_cache);
 		}
-		
-		self.storage.save_session(session, nid, id, receive_only).await;
+
+		self.storage
+			.save_session(session, nid, id, receive_only)
+			.await;
 	}
 
 	// decrypts a list of (mac, nid) sent to my nid returning a list of resutls
-	pub async fn decrypt_batched(&self, macs: Vec<(&[u8], &str)>, my_nid: &str) -> Vec<Result<Decrypted, Error>> {
+	pub async fn decrypt_batched(
+		&self,
+		macs: Vec<(&[u8], &str)>,
+		my_nid: &str,
+	) -> Vec<Result<Decrypted, Error>> {
 		let mut results = Vec::new();
 
-    for (mac, nid) in macs {
+		for (mac, nid) in macs {
 			results.push(self.decrypt(mac, nid, my_nid).await);
-    }
+		}
 
-    results
+		results
 	}
 
 	// decrypts a mac from nid sent to my_nid
@@ -853,9 +874,12 @@ mod tests {
 		let cryptor = Cryptor::new(Arc::new(alice_storage), Arc::new(alice_api));
 
 		// and now it fails
-		assert_eq!(Err(Error::SignedPrekeyForged), cryptor
-			.encrypt(b"124", Type::Chat, bob_nid, alice_nid, "token", false)
-			.await);
+		assert_eq!(
+			Err(Error::SignedPrekeyForged),
+			cryptor
+				.encrypt(b"124", Type::Chat, bob_nid, alice_nid, "token", false)
+				.await
+		);
 	}
 
 	// WARNING: this test fails with stack overflow on default stack size (2MB) in debug mode
