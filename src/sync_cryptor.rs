@@ -295,11 +295,11 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		force_reset: bool,
 	) -> Result<Vec<u8>, Error> {
 		if force_reset {
-			self.storage.clear_all_sessions_for_nid(nid);
+			self.clear_all_sessions_for_nid(nid).await;
 		}
 
-		if let Some(current) = self.storage.get_active_session_for_nid(nid) {
-			self.encrypt_with_session(current, plaintext, _type, nid)
+		if let Some(current) = self.get_active_session_for_nid(nid).await {
+			self.encrypt_with_session(current, plaintext, _type, nid).await
 		} else {
 			let my_identity = self
 				.storage
@@ -349,11 +349,11 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				force_reset,
 			);
 
-			self.encrypt_with_session(session, plaintext, _type, nid)
+			self.encrypt_with_session(session, plaintext, _type, nid).await
 		}
 	}
 
-	fn encrypt_with_session(
+	async fn encrypt_with_session(
 		&self,
 		mut session: Session,
 		plaintext: &[u8],
@@ -365,7 +365,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		let receive_only = session.receive_only();
 
 		// can be session.receive_only instead of false (its guaranteed to be that way)
-		self.storage.save_session(session, nid, id, receive_only);
+		self.save_session(session, nid, id, receive_only).await;
 		// Desktop keeps restarting indefinitely if encrypt throws, but it can't fail now
 
 		return Ok(ciphertext.serialize());
