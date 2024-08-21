@@ -180,7 +180,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				// ^ if no match, ignore the message?
 				// ^ if http error, try later?
 				// ^ if the sending account is deleted, ignore?
-				let mut session = Box::new(Session::bob(
+				let mut session = Session::bob(
 					identity,
 					kyber_identity,
 					signed_prekey,
@@ -189,12 +189,12 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 					their_identity,
 					their_key_x448,
 					their_key_kyber,
-				));
+				);
 
 				// TODO: check current.has_receive only first? –if yes, clear as well
 				if kex.force_reset {
 					self.clear_all_sessions_for_nid(nid).await;
-					self.decrypt_with_session(session, mac, nid).await
+					self.decrypt_with_session(Box::new(session), mac, nid).await
 				} else {
 					// do I have any other session for this nid?
 					if let Some(current) = self.get_active_session_for_nid(nid).await {
@@ -204,21 +204,21 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
 								session.set_receive_only();
 
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							} else {
 								// I was Alice, but at the same time some one initiated a session and I actually should be Bob
 								// now, I'll delete my session and will use the new one
 								self.clear_all_sessions_for_nid(nid).await;
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							}
 						} else {
 							// I'm bob already, but from now on, I should be using this new session only
 							self.clear_all_sessions_for_nid(nid).await;
-							self.decrypt_with_session(session, mac, nid).await
+							self.decrypt_with_session(Box::new(session), mac, nid).await
 						}
 					} else {
 						// this is a new and the only session, so proceed normally: decrypt, save, etc
-						self.decrypt_with_session(session, mac, nid).await
+						self.decrypt_with_session(Box::new(session), mac, nid).await
 					}
 				}
 			}
@@ -295,11 +295,11 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		force_reset: bool,
 	) -> Result<Vec<u8>, Error> {
 		if force_reset {
-			self.storage.clear_all_sessions_for_nid(nid);
+			self.clear_all_sessions_for_nid(nid).await;
 		}
 
-		if let Some(current) = self.storage.get_active_session_for_nid(nid) {
-			self.encrypt_with_session(current, plaintext, _type, nid)
+		if let Some(current) = self.get_active_session_for_nid(nid).await {
+			self.encrypt_with_session(current, plaintext, _type, nid).await
 		} else {
 			let my_identity = self
 				.storage
@@ -335,7 +335,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				return Err(Error::SignedPrekeyForged);
 			}
 
-			let session = Box::new(Session::alice(
+			let session = Session::alice(
 				my_identity,
 				my_ratchet,
 				my_signing_identity,
@@ -347,13 +347,13 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				bundle.prekey_kyber,
 				bundle.identity.kyber,
 				force_reset,
-			));
+			);
 
-			self.encrypt_with_session(session, plaintext, _type, nid)
+			self.encrypt_with_session(Box::new(session), plaintext, _type, nid).await
 		}
 	}
 
-	fn encrypt_with_session(
+	async fn encrypt_with_session(
 		&self,
 		mut session: Box<Session>,
 		plaintext: &[u8],
@@ -365,7 +365,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		let receive_only = session.receive_only();
 
 		// can be session.receive_only instead of false (its guaranteed to be that way)
-		self.storage.save_session(session, nid, id, receive_only);
+		self.save_session(session, nid, id, receive_only).await;
 		// Desktop keeps restarting indefinitely if encrypt throws, but it can't fail now
 
 		return Ok(ciphertext.serialize());
