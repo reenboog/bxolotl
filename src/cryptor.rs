@@ -33,14 +33,14 @@ pub trait Storage {
 	/// Should ignore receive_only sessions
 	// TODO: replace with `Nid`; should exclude receive_only session
 	// TODO: should be result to include the "DB is locked" case
-	fn get_active_session_for_nid(&self, nid: &str) -> Option<Session>;
+	fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>>;
 	/// Returns any session, whether active or receive_only
 	/// `nid` parameter has to be checked otherwise it's possible to bypass identity checks.
-	fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session>;
+	fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Box<Session>>;
 
 	/// Clears active and receive_only sessions, if any
 	fn clear_all_sessions_for_nid(&self, nid: &str); // TODO: result?
-	fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool); // TODO: introduce result
+	fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool); // TODO: introduce result
 
 	// Identity
 	fn get_my_x448_identity(&self) -> Option<KeyPairX448>; // TODO: Result with a custom error type?
@@ -61,11 +61,11 @@ pub trait Storage {
 
 #[async_trait]
 pub trait AsyncStorage {
-	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session>;
-	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session>;
+	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>>;
+	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Box<Session>>;
 
 	async fn clear_all_sessions_for_nid(&self, nid: &str);
-	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool);
+	async fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool);
 
 	async fn get_my_x448_identity(&self) -> Option<KeyPairX448>;
 	async fn get_my_ed448_identity(&self) -> Option<KeyPairEd448>;
@@ -85,11 +85,11 @@ impl<T> AsyncStorage for T
 where
 	T: Storage + Sync,
 {
-	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>> {
 		self.get_active_session_for_nid(nid)
 	}
 
-	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session> {
+	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Box<Session>> {
 		self.get_session_by_id(nid, id)
 	}
 
@@ -97,7 +97,7 @@ where
 		self.clear_all_sessions_for_nid(nid)
 	}
 
-	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+	async fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool) {
 		self.save_session(session, nid, id, receive_only)
 	}
 
@@ -155,7 +155,7 @@ pub struct Cryptor<S, A> {
 // wraps Session with nid
 struct CachedSession {
 	nid: String,
-	session: Session,
+	session: Box<Session>,
 }
 
 impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
@@ -230,7 +230,7 @@ pub struct FetchedPrekeyBundle {
 // TODO: reuse ccl's existing Nid type
 
 impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
-	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session> {
+	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Box<Session>> {
 		let mut cache = self.session_cache.lock().await;
 
 		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.id() == id) {
@@ -247,7 +247,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		}
 	}
 
-	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>> {
 		let mut cache = self.session_cache.lock().await;
 
 		if let Some(session) = cache
@@ -275,7 +275,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		self.storage.clear_all_sessions_for_nid(nid).await
 	}
 
-	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+	async fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool) {
 		let mut cache = self.session_cache.lock().await;
 		let to_cache = CachedSession {
 			nid: nid.to_string(),
@@ -390,7 +390,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				if kex.force_reset {
 					self.clear_all_sessions_for_nid(nid).await;
 
-					self.decrypt_with_session(session, mac, nid).await
+					self.decrypt_with_session(Box::new(session), mac, nid).await
 				} else {
 					// do I have any other session for this nid?
 					if let Some(current) = self.get_active_session_for_nid(nid).await {
@@ -400,23 +400,23 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
 								session.set_receive_only();
 
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							} else {
 								// I was Alice, but at the same time some one initiated a session and I actually should be Bob
 								// now, I'll delete my session and will use the new one
 								self.clear_all_sessions_for_nid(nid).await;
 
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							}
 						} else {
 							// I'm bob already, but from now on, I should be using this new session only
 							self.clear_all_sessions_for_nid(nid).await;
 
-							self.decrypt_with_session(session, mac, nid).await
+							self.decrypt_with_session(Box::new(session), mac, nid).await
 						}
 					} else {
 						// this is a new and the only session, so proceed normally: decrypt, save, etc
-						self.decrypt_with_session(session, mac, nid).await
+						self.decrypt_with_session(Box::new(session), mac, nid).await
 					}
 				}
 			}
@@ -432,7 +432,7 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 
 	async fn decrypt_with_session(
 		&self,
-		mut session: Session,
+		mut session: Box<Session>,
 		mac: AxolotlMac,
 		nid: &str,
 	) -> Result<Decrypted, Error> {
@@ -553,14 +553,14 @@ impl<S: AsyncStorage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				force_reset,
 			);
 
-			self.encrypt_with_session(session, plaintext, _type, nid)
+			self.encrypt_with_session(Box::new(session), plaintext, _type, nid)
 				.await
 		}
 	}
 
 	async fn encrypt_with_session(
 		&self,
-		mut session: Session,
+		mut session: Box<Session>,
 		plaintext: &[u8],
 		_type: Type,
 		nid: &str,
@@ -671,7 +671,7 @@ mod tests {
 
 	struct TestStorageData {
 		secrets: NodeIdSecrets,
-		sessions_by_id: HashMap<u64, Session>,
+		sessions_by_id: HashMap<u64, Box<Session>>,
 		active_sessions: HashMap<String, u64>,
 		receive_only_sessions: HashMap<String, HashSet<u64>>,
 		identity_keys: HashMap<String, IdentityKeys>,
@@ -698,14 +698,14 @@ mod tests {
 	}
 
 	impl super::Storage for TestStorage {
-		fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+		fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>> {
 			let data = self.0.lock().unwrap();
 			data.active_sessions
 				.get(nid)
 				.and_then(|x| data.sessions_by_id.get(x).map(|x| x.clone()))
 		}
 
-		fn get_session_by_id(&self, _nid: &str, id: u64) -> Option<Session> {
+		fn get_session_by_id(&self, _nid: &str, id: u64) -> Option<Box<Session>> {
 			let data = self.0.lock().unwrap();
 			data.sessions_by_id.get(&id).map(|x| x.clone())
 		}
@@ -725,7 +725,7 @@ mod tests {
 			}
 		}
 
-		fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+		fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool) {
 			let mut data = self.0.lock().unwrap();
 			if receive_only {
 				let active_session_id = data.active_sessions.get(nid);
