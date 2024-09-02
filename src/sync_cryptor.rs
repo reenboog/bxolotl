@@ -26,7 +26,7 @@ pub struct Cryptor<S, A> {
 // wraps Session with nid
 struct CachedSession {
 	nid: String,
-	session: Session,
+	session: Box<Session>,
 }
 
 impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
@@ -41,7 +41,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 }
 
 impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
-	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Session> {
+	async fn get_session_by_id(&self, nid: &str, id: u64) -> Option<Box<Session>> {
 		let mut cache = self.session_cache.lock().await;
 
 		if let Some(session) = cache.iter().find(|s| s.nid == nid && s.session.id() == id) {
@@ -58,7 +58,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		}
 	}
 
-	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Session> {
+	async fn get_active_session_for_nid(&self, nid: &str) -> Option<Box<Session>> {
 		let mut cache = self.session_cache.lock().await;
 
 		if let Some(session) = cache
@@ -86,7 +86,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 		self.storage.clear_all_sessions_for_nid(nid)
 	}
 
-	async fn save_session(&self, session: Session, nid: &str, id: u64, receive_only: bool) {
+	async fn save_session(&self, session: Box<Session>, nid: &str, id: u64, receive_only: bool) {
 		let mut cache = self.session_cache.lock().await;
 		let to_cache = CachedSession {
 			nid: nid.to_string(),
@@ -194,7 +194,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				// TODO: check current.has_receive only first? –if yes, clear as well
 				if kex.force_reset {
 					self.clear_all_sessions_for_nid(nid).await;
-					self.decrypt_with_session(session, mac, nid).await
+					self.decrypt_with_session(Box::new(session), mac, nid).await
 				} else {
 					// do I have any other session for this nid?
 					if let Some(current) = self.get_active_session_for_nid(nid).await {
@@ -204,21 +204,21 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 								// this session for some time in receive_only mode to decrypt their unacked (in terms of Axolotl) messages
 								session.set_receive_only();
 
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							} else {
 								// I was Alice, but at the same time some one initiated a session and I actually should be Bob
 								// now, I'll delete my session and will use the new one
 								self.clear_all_sessions_for_nid(nid).await;
-								self.decrypt_with_session(session, mac, nid).await
+								self.decrypt_with_session(Box::new(session), mac, nid).await
 							}
 						} else {
 							// I'm bob already, but from now on, I should be using this new session only
 							self.clear_all_sessions_for_nid(nid).await;
-							self.decrypt_with_session(session, mac, nid).await
+							self.decrypt_with_session(Box::new(session), mac, nid).await
 						}
 					} else {
 						// this is a new and the only session, so proceed normally: decrypt, save, etc
-						self.decrypt_with_session(session, mac, nid).await
+						self.decrypt_with_session(Box::new(session), mac, nid).await
 					}
 				}
 			}
@@ -234,7 +234,7 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 
 	async fn decrypt_with_session(
 		&self,
-		mut session: Session,
+		mut session: Box<Session>,
 		mac: AxolotlMac,
 		nid: &str,
 	) -> Result<Decrypted, Error> {
@@ -349,13 +349,13 @@ impl<S: Storage + Sync, A: Apis + Sync> Cryptor<S, A> {
 				force_reset,
 			);
 
-			self.encrypt_with_session(session, plaintext, _type, nid).await
+			self.encrypt_with_session(Box::new(session), plaintext, _type, nid).await
 		}
 	}
 
 	async fn encrypt_with_session(
 		&self,
-		mut session: Session,
+		mut session: Box<Session>,
 		plaintext: &[u8],
 		_type: Type,
 		nid: &str,
